@@ -1,0 +1,24 @@
+# 今日收盘数据
+
+## 标题日期
+{today_date}（{weekday_cn}）
+
+## 分析日期
+{target_date}
+
+## 数据源一（核心收盘数据）：BloombergHT 详细收盘与突发新闻
+{bloomberght_text}
+
+---
+
+## 数据源二（辅助观点）：Paraborsa 券商收盘评论
+{paraborsa_text}
+
+---
+
+## 数据源三（辅助技术/公告）：Info Yatırım 每日公告与技术分析
+{info_yatirim_text}
+
+---
+
+请根据以上数据生成完整的中文收评。注意：收盘数据（BIST 100 收盘价、涨跌幅、成交量、USD/TRY、EUR/TRY、黄金、原油等）必须以数据源一 BloombergHT 为准；数据源二、三仅用于补充分析师观点、技术位、市场情绪。

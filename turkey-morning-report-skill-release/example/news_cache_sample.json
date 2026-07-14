@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "target_date": "2026-07-10",
+  "web_search": {
+    "enabled": true,
+    "queries": [
+      "Turkey BIST stock market 2026-07-10",
+      "USD TRY exchange rate 2026-07-10",
+      "Turkey economic news 2026-07-10"
+    ],
+    "results": [
+      {
+        "title": "美国撤销伊朗石油销售通用许可",
+        "snippet": "7月7日美国财政部宣布撤销此前允许伊朗石油生产、交付和销售的60天通用许可，新许可自当日起禁止所有新交易。此举导致国际油价显著上涨。"
+      },
+      {
+        "title": "S&P 500 July 10 2026",
+        "snippet": "S&P 500收涨0.42%至7,575.39点，纳斯达克涨0.29%，科技股带动市场录得周度正收益。"
+      },
+      {
+        "title": "SK海力士纳斯达克上市",
+        "snippet": "SK海力士于7月10日在纳斯达克启动发行前交易（when-issued），代码SKHYV。"
+      },
+      {
+        "title": "布伦特原油与黄金价格",
+        "snippet": "布伦特原油7月10日当周收于75.25-76.32美元区间，全周波动剧烈；国际金价约4,102美元/盎司。"
+      }
+    ]
+  },
+  "x_search": {
+    "enabled": false,
+    "queries": [],
+    "results": []
+  }
+}
