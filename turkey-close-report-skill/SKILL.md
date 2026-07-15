@@ -47,13 +47,13 @@ Every source has a date guard. After fetching, the skill checks whether the fetc
 ## Inputs the Caller Must Provide
 
 1. A configured LLM API that can read Turkish and write Chinese
-2. Working directory containing Turkey-investment project data
-3. Environment variables for the chosen LLM provider
+2. Environment variables for the chosen LLM provider (see `SETUP.md`)
+3. Python 3.9+ with `requirements.txt` dependencies
 
 ## Outputs
 
 - A single text file: `{output_dir}/{date}_close_report_zh.txt`
-- Default output directory: `reports/hermes-briefings`
+- Default output directory: `output/`
 
 ## Run Flow
 
@@ -106,8 +106,12 @@ See `config.json`. Key knobs:
 ## Example Invocation
 
 ```bash
+pip install -r requirements.txt
+export MINIMAX_API_KEY="your-key"
 python scripts/generate_close_report.py --config config.json
 ```
+
+See `SETUP.md` for deployment across Cursor, Codex, Hermes, OpenClaw, and WorkBuddy.
 
 ## License
 

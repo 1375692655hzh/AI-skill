@@ -1,5 +1,6 @@
 # Cache and runtime artifacts
 .cache/
+output/
 __pycache__/
 *.pyc
 *.pyo

@@ -19,6 +19,12 @@
 ### 1. 安装依赖
 
 ```bash
+pip install -r requirements.txt
+```
+
+或手动安装：
+
+```bash
 pip install requests beautifulsoup4 feedparser
 ```
 
@@ -64,7 +70,9 @@ export OPENAI_API_KEY="你的key"
 python scripts/generate_briefing.py --config config.json
 ```
 
-输出文件：`reports/hermes-briefings/{日期}_daily_briefing_zh.txt`
+输出文件：`output/{日期}_daily_briefing_zh.txt`
+
+完整部署说明见 `SETUP.md`。
 
 ---
 
@@ -129,8 +137,9 @@ THYAO成交约154亿里拉排名第二...
 
 | 配置项 | 说明 |
 |--------|------|
-| `output_dir` | 输出目录，默认 `reports/hermes-briefings` |
+| `output_dir` | 输出目录，默认 `output` |
 | `cache_dir` | 缓存目录，默认 `.cache/turkey-morning-report` |
+| `workdir` | 工作目录，默认 `.`（skill 目录本身） |
 | `sources.news.bloomberght.enabled` | 启用 BloombergHT 新闻抓取 |
 | `sources.news.mode` | `agent`（调用者提供新闻）或 `api`（skill 自动搜索） |
 | `sources.news.search_engine` | 搜索 API 配置（Tavily/Serper/Firecrawl） |
@@ -146,7 +155,9 @@ turkey-morning-report-skill/
 ├── SKILL.md                        # 完整文档
 ├── README.md                       # 本文件
 ├── QUICKSTART.md                   # 快速开始
-├── config.json                     # 配置文件
+├── SETUP.md                        # 部署指南（给同事）
+├── config.example.json             # 配置模板
+├── requirements.txt                # Python 依赖
 ├── scripts/
 │   ├── generate_briefing.py        # 主入口
 │   ├── fetch_bloomberght_closing.py # BloombergHT 抓取

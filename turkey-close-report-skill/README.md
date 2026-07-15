@@ -64,6 +64,12 @@
 ### 1. 安装依赖
 
 ```bash
+pip install -r requirements.txt
+```
+
+或：
+
+```bash
 pip install requests beautifulsoup4 feedparser lxml
 ```
 
@@ -124,10 +130,12 @@ python scripts/generate_close_report.py --force-date 2026-07-10 --config config.
 
 ```
 turkey-close-report-skill/
-├── SKILL.md                        # 完整文档
-├── README.md                       # 本文件
-├── QUICKSTART.md                   # 快速开始
-├── config.json                     # 配置文件
+├── SKILL.md
+├── SETUP.md                        # 部署指南（给同事）
+├── README.md
+├── QUICKSTART.md
+├── config.json / config.example.json
+├── requirements.txt
 ├── scripts/
 │   ├── generate_close_report.py    # 主入口（含日期校验）
 │   ├── fetch_bloomberght.py        # BloombergHT 收盘抓取

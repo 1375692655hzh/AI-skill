@@ -48,7 +48,9 @@ If the tool is unavailable, the skill falls back to web search only.
 
 ## Legacy / Optional Sources
 
-These are supported by the existing `fetch.py` in the Turkey-investment project. They can be enabled by adding a custom step to the configuration or by extending the skill.
+These are supported by the optional `fetch.py` in a Turkey-investment project. Enable `sources.bloomberght_closing.use_project_fetcher: true` and set `workdir` to that project path.
+
+Default output directory: `output/`.
 
 | Source | Name in `fetch.py` | Typical TR time |
 |--------|-------------------|-----------------|
@@ -69,6 +71,6 @@ Only one file is produced:
 {output_dir}/{today_date}_daily_briefing_zh.txt
 ```
 
-Default output directory: `reports/hermes-briefings`.
+Default output directory: `output/`.
 
 No delivery/push is performed.

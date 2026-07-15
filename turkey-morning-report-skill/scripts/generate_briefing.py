@@ -18,6 +18,7 @@ from call_llm import call_llm
 from fetch_bloomberght_closing import fetch_closing_review
 from fetch_news import fetch_news
 from resolve_target_date import resolve_dates
+from runtime_utils import configure_stdio, resolve_paths
 from validate_output import validate
 
 
@@ -26,6 +27,7 @@ def load_config(config_path: Path) -> dict:
 
 
 def main() -> int:
+    configure_stdio()
     parser = argparse.ArgumentParser(description="Generate Turkey morning briefing.")
     parser.add_argument("--config", required=True, help="Path to config.json")
     parser.add_argument("--force-date", help="Force target date (YYYY-MM-DD) for testing")
@@ -35,18 +37,19 @@ def main() -> int:
     config_path = Path(args.config).resolve()
     config = load_config(config_path)
 
-    skill_dir = config_path.parent
-    workdir = Path(config.get("workdir", ".")).resolve()
+    skill_dir, workdir, output_dir, cache_dir, template_path = resolve_paths(
+        config_path,
+        config,
+        default_template="templates/morning_briefing_template.txt",
+        default_cache=".cache/turkey-morning-report",
+    )
     os.chdir(workdir)
-
-    output_dir = Path(config.get("output_dir", "reports/hermes-briefings")).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    cache_dir = Path(config.get("cache_dir", ".cache/turkey-morning-report")).resolve()
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    template_path = skill_dir / config.get("template_path", "templates/morning_briefing_template.txt")
     if not template_path.is_file():
-        template_path = workdir / "reports" / "早报参考模板.txt"
+        print(f"Template not found: {template_path}", file=sys.stderr)
+        return 1
 
     # 1. Resolve dates
     dates = resolve_dates(
@@ -94,22 +97,22 @@ def main() -> int:
 
     # Build news text from multiple sources
     news_parts = []
-    
+
     # 3a. BloombergHT breaking news (SON DAKİKA)
     bht = news.get("bloomberght", {})
     breaking = bht.get("breaking_news", [])
     featured = bht.get("featured_news", [])
-    
+
     if breaking:
-        news_parts.append("=== SON DAKİKA (突发新闻) ===")
+        news_parts.append("【盘中突发】")
         for item in breaking:
-            news_parts.append(f"- {item.get('title', '')}")
-    
+            news_parts.append(item.get("title", ""))
+
     if featured:
-        news_parts.append("\n=== Öne Çıkan Haberler (重点新闻) ===")
+        news_parts.append("\n【重点资讯】")
         for item in featured:
-            news_parts.append(f"- {item.get('title', '')}")
-    
+            news_parts.append(item.get("title", ""))
+
     # 3b. Web search results (if BloombergHT news is insufficient)
     if not breaking and not featured:
         if news["web_search"]["results"]:
@@ -118,7 +121,7 @@ def main() -> int:
         if news["x_search"]["results"]:
             for item in news["x_search"]["results"]:
                 news_parts.append(f"{item.get('title', '')}: {item.get('snippet', '')}")
-    
+
     news_text = "\n".join(news_parts) if news_parts else "（无补充新闻数据）"
 
     # 4. Build prompt
@@ -152,8 +155,30 @@ def main() -> int:
         print(f"LLM call failed: {e}", file=sys.stderr)
         return 1
 
-    # 6. Validate
     validation = validate(output)
+    if not validation["ok"] and validation.get("attribution_hits"):
+        fix_prompt = (
+            prompt
+            + "\n\n【重要修订】你上一版草稿仍出现了来源署名（如券商、平台、研究机构名称）。"
+            "请完全重写：正文不得出现任何机构/平台/网站/报告名称，"
+            "也不得使用「某某指出/认为/提示/警告」句式。把观点写成你自己的判断。"
+        )
+        try:
+            output = call_llm(
+                prompt=fix_prompt,
+                provider=llm_cfg.get("provider", "openai"),
+                model=llm_cfg.get("model", "gpt-4o"),
+                api_key_env=llm_cfg.get("api_key_env", "OPENAI_API_KEY"),
+                base_url=llm_cfg.get("base_url"),
+                temperature=max(0.2, llm_cfg.get("temperature", 0.4) - 0.1),
+                max_tokens=llm_cfg.get("max_tokens", 2500),
+            )
+            validation = validate(output)
+        except Exception as e:
+            print(f"LLM retry failed: {e}", file=sys.stderr)
+            return 1
+
+    # 6. Validate
     if not validation["ok"]:
         print(f"Validation failed: {validation['errors']}", file=sys.stderr)
         # Still write raw output for debugging

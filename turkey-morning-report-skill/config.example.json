@@ -1,13 +1,13 @@
 {
-  "workdir": "D:/AI项目/Turkey-investment",
-  "output_dir": "reports/hermes-briefings",
+  "workdir": ".",
+  "output_dir": "output",
   "cache_dir": ".cache/turkey-morning-report",
   "target_date": "auto",
   "template_path": "templates/morning_briefing_template.txt",
   "sources": {
     "bloomberght_closing": {
       "enabled": true,
-      "use_project_fetcher": true,
+      "use_project_fetcher": false,
       "rss_url": "https://www.bloomberght.com/rss",
       "list_page_url": "https://www.bloomberght.com/tum-piyasa-haberleri",
       "title_patterns": [
@@ -46,17 +46,17 @@
       "api": {
         "provider": "minimax",
         "model": "MiniMax-M3",
-        "api_key": "",
+        "api_key": "${MINIMAX_API_KEY}",
         "base_url": "https://api.minimaxi.com/v1",
         "temperature": 0.3
       }
     }
   },
   "llm": {
-    "provider": "openai",
-    "model": "gpt-4o",
-    "api_key_env": "OPENAI_API_KEY",
-    "base_url": null,
+    "provider": "minimax",
+    "model": "MiniMax-M3",
+    "api_key_env": "MINIMAX_API_KEY",
+    "base_url": "https://api.minimaxi.com/v1",
     "temperature": 0.4,
     "max_tokens": 8000
   },

@@ -32,13 +32,15 @@ Do **not** use this skill for real-time trading signals, options/FX-only reports
 ## Inputs the Caller Must Provide
 
 1. **A configured LLM API** that can read Turkish and write Chinese in the requested format. The skill does not bundle a model.
-2. **Working directory**: typically the Turkey-investment project root (`D:\AI项目\Turkey-investment`). It should contain the existing `fetch.py` if you enable the legacy closing-review path.
-3. **Environment variables** for the chosen LLM provider (see `references/llm_provider_examples.md`).
+2. **Environment variables** for the chosen LLM provider (see `references/llm_provider_examples.md`).
+3. **Python 3.9+** with dependencies from `requirements.txt` (see `SETUP.md`).
+
+The skill is self-contained. A separate Turkey-investment project is **optional** — only needed if you enable `sources.bloomberght_closing.use_project_fetcher`.
 
 ## Outputs
 
 - A single text file written to `{output_dir}/{today_date}_daily_briefing_zh.txt`.
-- The default output directory is `reports/hermes-briefings`.
+- Default output directory is `output/` (relative to skill directory).
 - No WhatsApp, email, or other delivery is performed.
 
 ## Run Flow
@@ -180,21 +182,22 @@ The briefing must be a single Chinese text file with this structure and style:
 
 ## Example Invocation
 
-From the project working directory:
+From the skill directory:
 
 ```bash
-python D:/AI\ skills/turkey-morning-report-skill/scripts/generate_briefing.py \
-  --config D:/AI\ skills/turkey-morning-report-skill/config.json
+pip install -r requirements.txt
+export MINIMAX_API_KEY="your-key"
+python scripts/generate_briefing.py --config config.json
 ```
 
-As an agent skill, load the `SKILL.md` and follow the flow above. The agent should read the configuration, run the scripts, and deliver the final file path.
+See `SETUP.md` for full deployment instructions across Cursor, Codex, Hermes, OpenClaw, and WorkBuddy.
 
 ## Common Pitfalls
 
 1. **Running on a Turkish holiday.** The skill returns a clear holiday message and does not generate a briefing.
 2. **BloombergHT article not yet published.** If the previous day's closing review is not yet online, the skill reports missing data and writes a placeholder, rather than fabricating data.
 3. **LLM without Turkish capability.** The model must read the Turkish BloombergHT article; otherwise the output will be generic or hallucinated. Verify with the provider first.
-4. **Missing working directory.** The skill must be run from, or configured with, the Turkey-investment project directory so that relative paths resolve.
+4. **Missing API key.** Set `MINIMAX_API_KEY` or `OPENAI_API_KEY` per `config.json`.
 5. **Treating output as a push.** This skill only writes a file. The caller must add its own WhatsApp/email/Slack sender if needed.
 
 ## Verification Checklist

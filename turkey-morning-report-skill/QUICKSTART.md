@@ -11,6 +11,12 @@
 ### 1. 依赖
 
 ```bash
+pip install -r requirements.txt
+```
+
+或：
+
+```bash
 pip install requests beautifulsoup4 feedparser
 ```
 
@@ -106,10 +112,10 @@ python scripts/generate_briefing.py --force-date 2026-07-10 --config config.json
 早报文件保存在：
 
 ```
-{output_dir}/{today_date}_daily_briefing_zh.txt
+output/{today_date}_daily_briefing_zh.txt
 ```
 
-默认路径：`reports/hermes-briefings/`
+首次使用：`cp config.example.json config.json`，详见 `SETUP.md`。
 
 ---
 

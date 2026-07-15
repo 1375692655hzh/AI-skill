@@ -9,6 +9,12 @@
 ## 依赖安装
 
 ```bash
+pip install -r requirements.txt
+```
+
+或：
+
+```bash
 pip install requests beautifulsoup4 feedparser lxml
 ```
 
@@ -92,10 +98,10 @@ python scripts/generate_close_report.py --force-date 2026-07-10 --config config.
 文件保存到：
 
 ```
-reports/hermes-briefings/{日期}_close_report_zh.txt
+output/{日期}_close_report_zh.txt
 ```
 
-默认工作目录：`D:/AI项目/Turkey-investment`
+首次使用：`cp config.example.json config.json`，详见 `SETUP.md`。
 
 ---
 
