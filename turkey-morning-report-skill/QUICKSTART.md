@@ -112,7 +112,8 @@ python scripts/generate_briefing.py --force-date 2026-07-10 --config config.json
 早报文件保存在：
 
 ```
-output/{today_date}_daily_briefing_zh.txt
+output/{today_date}_daily_briefing_zh.txt          # 完整版
+output/{today_date}_daily_briefing_brief_zh.txt    # 简报版
 ```
 
 首次使用：`cp config.example.json config.json`，详见 `SETUP.md`。

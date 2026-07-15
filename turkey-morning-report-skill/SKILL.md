@@ -39,7 +39,8 @@ The skill is self-contained. A separate Turkey-investment project is **optional*
 
 ## Outputs
 
-- A single text file written to `{output_dir}/{today_date}_daily_briefing_zh.txt`.
+- **完整版**：`{output_dir}/{today_date}_daily_briefing_zh.txt`（800–1200 字）
+- **简报版**：`{output_dir}/{today_date}_daily_briefing_brief_zh.txt`（400–650 字，【字段】结构化，个股每只一行）
 - Default output directory is `output/` (relative to skill directory).
 - No WhatsApp, email, or other delivery is performed.
 
@@ -59,7 +60,21 @@ The skill is self-contained. A separate Turkey-investment project is **optional*
 4. **Build prompt** from the template and the collected data.
 5. **Call the configured LLM** with strict format instructions.
 6. **Validate output**.
-7. **Write file** and return the path.
+7. **Validate output** (full + brief).
+8. **Write files** and return paths.
+
+Brief format (one field per line):
+
+```
+【土耳其股市早报简报 — {date}】
+指数：...
+汇率：...
+驱动：...
+个股：...
+板块：...
+操作：...
+风险：...
+```
 
 ## News Sources
 
@@ -161,6 +176,8 @@ See `config.json` for the default configuration. Key knobs:
 | `sources.news.api` | API configuration for mode `api`. |
 | `llm` | Provider, model, base URL, temperature, API key env var. |
 | `holidays` | ISO dates when Borsa İstanbul is closed. |
+| `brief.enabled` | Generate structured brief version (default `true`). |
+| `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 400–650). |
 
 ## Format Rules (Enforced by Prompt and Validator)
 
@@ -204,7 +221,7 @@ See `SETUP.md` for full deployment instructions across Cursor, Codex, Hermes, Op
 
 - [ ] `config.json` points to a valid working directory and output directory.
 - [ ] LLM environment variables are exported.
-- [ ] Running the skill produces `{output_dir}/{today_date}_daily_briefing_zh.txt`.
+- [ ] Running the skill produces `{output_dir}/{today_date}_daily_briefing_zh.txt` and `{output_dir}/{today_date}_daily_briefing_brief_zh.txt`.
 - [ ] The output contains all 6 sections and the risk warning.
 - [ ] The output has no tables, emojis, bullets, or Markdown separators.
 - [ ] The target date logic is correct for Monday/holiday scenarios.

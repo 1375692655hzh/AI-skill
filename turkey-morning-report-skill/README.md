@@ -70,9 +70,27 @@ export OPENAI_API_KEY="你的key"
 python scripts/generate_briefing.py --config config.json
 ```
 
-输出文件：`output/{日期}_daily_briefing_zh.txt`
+成品在 `output/` 目录：
 
-完整部署说明见 `SETUP.md`。
+| 文件 | 说明 |
+|------|------|
+| `{日期}_daily_briefing_zh.txt` | 完整早评（800–1200 字） |
+| `{日期}_daily_briefing_brief_zh.txt` | 结构化简报（400–650 字，个股每只一行） |
+
+简报版示例格式：
+
+```
+【土耳其股市早报简报 — 2026-07-15】
+指数：BIST 100 14080点（-0.09%），14000关口拉锯
+汇率：美元/里拉47.03，黄金大涨2.3%
+驱动：美联储鹰派 + 地缘升温
+个股：ASELS 高换手 | THYAO 成交居首
+板块：金属/保险领涨，科技领跌
+操作：五成以下防御，关注14115/13940
+风险：地缘冲突、油价波动
+```
+
+关闭简报：在 `config.json` 设 `"brief": {"enabled": false}`。
 
 ---
 

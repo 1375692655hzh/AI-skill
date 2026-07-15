@@ -10,20 +10,33 @@ import sys
 from datetime import date
 from pathlib import Path
 
-# Add skill scripts to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from build_brief_prompt import build_brief_prompt
 from build_prompt import build_prompt
-from call_llm import call_llm
 from fetch_bloomberght_closing import fetch_closing_review
 from fetch_news import fetch_news
+from llm_runner import generate_with_validation
 from resolve_target_date import resolve_dates
 from runtime_utils import configure_stdio, resolve_paths
+from validate_brief_output import validate_brief
 from validate_output import validate
 
 
 def load_config(config_path: Path) -> dict:
     return json.loads(config_path.read_text(encoding="utf-8"))
+
+
+def resolve_brief_template(skill_dir: Path, config: dict) -> Path | None:
+    brief_cfg = config.get("brief", {})
+    if not brief_cfg.get("enabled", True):
+        return None
+    rel = brief_cfg.get("template_path", "templates/morning_briefing_brief_template.txt")
+    candidates = [skill_dir / rel, Path(__file__).resolve().parent.parent / rel]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
 
 
 def main() -> int:
@@ -51,7 +64,6 @@ def main() -> int:
         print(f"Template not found: {template_path}", file=sys.stderr)
         return 1
 
-    # 1. Resolve dates
     dates = resolve_dates(
         forced_target=args.force_date,
         holidays=config.get("holidays"),
@@ -67,13 +79,9 @@ def main() -> int:
         return 0
 
     output_file = output_dir / f"{today_date}_daily_briefing_zh.txt"
-    if output_file.exists() and not args.force_date:
-        print(f"Output already exists: {output_file}", file=sys.stderr)
-        # Continue anyway to allow re-generation
+    brief_file = output_dir / f"{today_date}_daily_briefing_brief_zh.txt"
 
     closing_cfg = config.get("sources", {}).get("bloomberght_closing", {})
-
-    # 2. Fetch closing review
     closing = fetch_closing_review(
         target_date=date.fromisoformat(target_date),
         cache_dir=cache_dir,
@@ -85,7 +93,6 @@ def main() -> int:
         print(f"Warning: closing review fetch failed: {closing.get('error')}", file=sys.stderr)
     closing_text = closing.get("text") or closing.get("error") or "无收盘数据"
 
-    # 3. Fetch news
     news_cfg = config.get("sources", {}).get("news", {})
     news = fetch_news(
         target_date=date.fromisoformat(target_date),
@@ -95,10 +102,7 @@ def main() -> int:
         closing_cfg=closing_cfg,
     )
 
-    # Build news text from multiple sources
     news_parts = []
-
-    # 3a. BloombergHT breaking news (SON DAKİKA)
     bht = news.get("bloomberght", {})
     breaking = bht.get("breaking_news", [])
     featured = bht.get("featured_news", [])
@@ -107,13 +111,10 @@ def main() -> int:
         news_parts.append("【盘中突发】")
         for item in breaking:
             news_parts.append(item.get("title", ""))
-
     if featured:
         news_parts.append("\n【重点资讯】")
         for item in featured:
             news_parts.append(item.get("title", ""))
-
-    # 3b. Web search results (if BloombergHT news is insufficient)
     if not breaking and not featured:
         if news["web_search"]["results"]:
             for item in news["web_search"]["results"]:
@@ -124,7 +125,6 @@ def main() -> int:
 
     news_text = "\n".join(news_parts) if news_parts else "（无补充新闻数据）"
 
-    # 4. Build prompt
     prompt = build_prompt(
         template_path=template_path,
         today_date=today_date,
@@ -139,60 +139,50 @@ def main() -> int:
         print(f"Prompt saved to: {prompt_file}")
         return 0
 
-    # 5. Call LLM
     llm_cfg = config["llm"]
-    try:
-        output = call_llm(
-            prompt=prompt,
-            provider=llm_cfg.get("provider", "openai"),
-            model=llm_cfg.get("model", "gpt-4o"),
-            api_key_env=llm_cfg.get("api_key_env", "OPENAI_API_KEY"),
-            base_url=llm_cfg.get("base_url"),
-            temperature=llm_cfg.get("temperature", 0.4),
-            max_tokens=llm_cfg.get("max_tokens", 2500),
-        )
-    except Exception as e:
-        print(f"LLM call failed: {e}", file=sys.stderr)
+    output, validation = generate_with_validation(prompt, llm_cfg, validate)
+    if output is None or not validation["ok"]:
+        print(f"Validation failed: {validation.get('errors', [])}", file=sys.stderr)
+        if output:
+            debug_file = cache_dir / f"raw_output_{today_date}.txt"
+            debug_file.write_text(output, encoding="utf-8")
+            print(f"Raw output saved to: {debug_file}", file=sys.stderr)
         return 1
 
-    validation = validate(output)
-    if not validation["ok"] and validation.get("attribution_hits"):
-        fix_prompt = (
-            prompt
-            + "\n\n【重要修订】你上一版草稿仍出现了来源署名（如券商、平台、研究机构名称）。"
-            "请完全重写：正文不得出现任何机构/平台/网站/报告名称，"
-            "也不得使用「某某指出/认为/提示/警告」句式。把观点写成你自己的判断。"
-        )
-        try:
-            output = call_llm(
-                prompt=fix_prompt,
-                provider=llm_cfg.get("provider", "openai"),
-                model=llm_cfg.get("model", "gpt-4o"),
-                api_key_env=llm_cfg.get("api_key_env", "OPENAI_API_KEY"),
-                base_url=llm_cfg.get("base_url"),
-                temperature=max(0.2, llm_cfg.get("temperature", 0.4) - 0.1),
-                max_tokens=llm_cfg.get("max_tokens", 2500),
-            )
-            validation = validate(output)
-        except Exception as e:
-            print(f"LLM retry failed: {e}", file=sys.stderr)
-            return 1
-
-    # 6. Validate
-    if not validation["ok"]:
-        print(f"Validation failed: {validation['errors']}", file=sys.stderr)
-        # Still write raw output for debugging
-        debug_file = cache_dir / f"raw_output_{today_date}.txt"
-        debug_file.write_text(output, encoding="utf-8")
-        print(f"Raw output saved to: {debug_file}", file=sys.stderr)
-        return 1
-
-    if validation["warnings"]:
+    if validation.get("warnings"):
         print(f"Validation warnings: {validation['warnings']}", file=sys.stderr)
 
-    # 7. Write output
     output_file.write_text(output, encoding="utf-8")
     print(f"Briefing written to: {output_file}")
+
+    brief_template = resolve_brief_template(skill_dir, config)
+    if brief_template:
+        brief_cfg = config.get("brief", {})
+        brief_prompt = build_brief_prompt(brief_template, today_date, output)
+        brief_llm_cfg = {
+            **llm_cfg,
+            "max_tokens": brief_cfg.get("max_tokens", 1200),
+            "temperature": brief_cfg.get("temperature", 0.3),
+        }
+        brief_output, brief_validation = generate_with_validation(
+            brief_prompt,
+            brief_llm_cfg,
+            lambda text: validate_brief(
+                text,
+                min_chars=brief_cfg.get("min_chars", 400),
+                max_chars=brief_cfg.get("max_chars", 650),
+            ),
+        )
+        if brief_output and brief_validation.get("ok"):
+            brief_file.write_text(brief_output, encoding="utf-8")
+            print(f"Brief briefing written to: {brief_file}")
+        else:
+            print(f"Brief validation failed: {brief_validation.get('errors', [])}", file=sys.stderr)
+            if brief_output:
+                debug_brief = cache_dir / f"raw_brief_{today_date}.txt"
+                debug_brief.write_text(brief_output, encoding="utf-8")
+                print(f"Raw brief saved to: {debug_brief}", file=sys.stderr)
+
     return 0
 
 

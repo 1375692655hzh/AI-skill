@@ -72,7 +72,14 @@ python scripts/generate_briefing.py --config config.json --force-date 2026-07-14
 python scripts/generate_briefing.py --config config.json --no-llm
 ```
 
-输出文件：`output/{日期}_daily_briefing_zh.txt`
+输出文件：
+
+| 文件 | 说明 |
+|------|------|
+| `output/{日期}_daily_briefing_zh.txt` | 完整早评 |
+| `output/{日期}_daily_briefing_brief_zh.txt` | 结构化简报（400–650 字，个股每只一行） |
+
+关闭简报：`config.json` 中设 `"brief": {"enabled": false}`。
 
 ---
 

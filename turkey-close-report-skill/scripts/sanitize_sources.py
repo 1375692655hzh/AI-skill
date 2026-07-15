@@ -98,6 +98,16 @@ def sanitize_prompt(prompt: str) -> str:
     return cleaned.strip()
 
 
+_ATTRIBUTION_VERBS = ("指出", "认为", "提示", "警告", "分析称", "报告显示")
+_GENERIC_MARKET_PHRASES = (
+    "机构调仓",
+    "机构资金",
+    "部分机构",
+    "大资金",
+    "主力资金",
+)
+
+
 def find_forbidden_attributions(text: str) -> list[str]:
     if not text:
         return []
@@ -106,9 +116,12 @@ def find_forbidden_attributions(text: str) -> list[str]:
         frag = m.group(0).strip()
         if frag and frag not in hits:
             hits.append(frag)
-    for m in re.finditer(r"[^。；\n]{0,16}(?:指出|认为|提示|警告|维持|分析称|报告显示)", text):
+    verb_pattern = "|".join(re.escape(v) for v in _ATTRIBUTION_VERBS)
+    for m in re.finditer(rf"[^。；\n]{{0,16}}(?:{verb_pattern})", text):
         prefix = m.group(0)
-        if any(k in prefix for k in ("机构", "券商", "研报", "报告", "分析师", "平台")):
+        if any(ok in prefix for ok in _GENERIC_MARKET_PHRASES):
+            continue
+        if any(k in prefix for k in ("券商", "研报", "报告", "分析师", "平台")):
             if prefix not in hits:
                 hits.append(prefix)
     return hits

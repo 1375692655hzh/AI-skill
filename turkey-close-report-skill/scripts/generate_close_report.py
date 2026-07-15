@@ -12,14 +12,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from build_brief_prompt import build_brief_prompt
 from build_prompt import build_prompt
-from call_llm import call_llm
 from check_source_date import is_content_for_date
 from fetch_bloomberght import fetch_close_review
 from fetch_info_yatirim import fetch_info_yatirim
 from fetch_paraborsa import fetch_paraborsa
+from llm_runner import generate_with_validation
 from resolve_target_date import resolve_target_date, today_tr, is_trading_day_open
 from runtime_utils import configure_stdio, resolve_paths
+from validate_brief_output import validate_brief
 from validate_output import validate
 
 
@@ -28,6 +30,18 @@ WEEKDAYS_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周�
 
 def load_config(config_path: Path) -> dict:
     return json.loads(config_path.read_text(encoding="utf-8"))
+
+
+def resolve_brief_template(skill_dir: Path, config: dict) -> Path | None:
+    brief_cfg = config.get("brief", {})
+    if not brief_cfg.get("enabled", True):
+        return None
+    rel = brief_cfg.get("template_path", "templates/close_report_brief_template.txt")
+    candidates = [skill_dir / rel, Path(__file__).resolve().parent.parent / rel]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
 
 
 def format_bloomberght(data: dict) -> str:
@@ -67,7 +81,7 @@ def format_info_yatirim(data: dict) -> str:
 def generate(config_path: Path, force_date: str | None = None, no_llm: bool = False) -> Path | None:
     configure_stdio()
     config = load_config(config_path)
-    _, workdir, output_dir, cache_dir, template_path = resolve_paths(
+    skill_dir, workdir, output_dir, cache_dir, template_path = resolve_paths(
         config_path,
         config,
         default_template="templates/close_report_template.txt",
@@ -156,57 +170,57 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
         return prompt_file
 
     llm_cfg = config["llm"]
-    api_key_env = llm_cfg.get("api_key") or llm_cfg.get("api_key_env", "OPENAI_API_KEY")
-    try:
-        content = call_llm(
-            prompt=prompt,
-            provider=llm_cfg["provider"],
-            model=llm_cfg["model"],
-            api_key_env=api_key_env,
-            base_url=llm_cfg.get("base_url"),
-            temperature=llm_cfg.get("temperature", 0.4),
-            max_tokens=llm_cfg.get("max_tokens", 4000),
-        )
-    except Exception as exc:
-        print(f"LLM call failed: {exc}", file=sys.stderr)
+    content, result = generate_with_validation(prompt, llm_cfg, validate)
+    if content is None or not result.get("ok"):
+        if content:
+            raw_output = cache_dir / f"close_raw_output_{target_date.isoformat()}.txt"
+            raw_output.write_text(content, encoding="utf-8")
+        print(f"Validation failed: {result.get('errors', [])}")
+        if content:
+            print(f"Raw output saved to: {raw_output}")
         return None
 
-    result = validate(content)
-    if not result["ok"] and result.get("attribution_hits"):
-        fix_prompt = (
-            prompt
-            + "\n\n【重要修订】你上一版草稿仍出现了来源署名（如券商、平台、研究机构名称）。"
-            "请完全重写：正文不得出现任何机构/平台/网站/报告名称，"
-            "也不得使用「某某指出/认为/提示/警告」句式。把观点写成你自己的判断。"
-        )
-        try:
-            content = call_llm(
-                prompt=fix_prompt,
-                provider=llm_cfg["provider"],
-                model=llm_cfg["model"],
-                api_key_env=api_key_env,
-                base_url=llm_cfg.get("base_url"),
-                temperature=max(0.2, llm_cfg.get("temperature", 0.4) - 0.1),
-                max_tokens=llm_cfg.get("max_tokens", 4000),
-            )
-            result = validate(content)
-        except Exception as exc:
-            print(f"LLM retry failed: {exc}", file=sys.stderr)
-            return None
-
-    if not result["ok"]:
-        raw_output = cache_dir / f"close_raw_output_{target_date.isoformat()}.txt"
-        raw_output.write_text(content, encoding="utf-8")
-        print(f"Validation failed: {result['errors']}")
-        print(f"Raw output saved to: {raw_output}")
-        return None
-
-    if result["warnings"]:
+    if result.get("warnings"):
         print(f"Validation warnings: {result['warnings']}")
 
     output_file = output_dir / f"{target_date.isoformat()}_close_report_zh.txt"
     output_file.write_text(content, encoding="utf-8")
     print(f"Close report written to: {output_file}")
+
+    brief_template = resolve_brief_template(skill_dir, config)
+    if brief_template:
+        brief_cfg = config.get("brief", {})
+        brief_prompt = build_brief_prompt(
+            brief_template,
+            target_date.isoformat(),
+            weekday_cn,
+            content,
+        )
+        brief_llm_cfg = {
+            **llm_cfg,
+            "max_tokens": brief_cfg.get("max_tokens", 1200),
+            "temperature": brief_cfg.get("temperature", 0.3),
+        }
+        brief_output, brief_result = generate_with_validation(
+            brief_prompt,
+            brief_llm_cfg,
+            lambda text: validate_brief(
+                text,
+                min_chars=brief_cfg.get("min_chars", 400),
+                max_chars=brief_cfg.get("max_chars", 650),
+            ),
+        )
+        brief_file = output_dir / f"{target_date.isoformat()}_close_report_brief_zh.txt"
+        if brief_output and brief_result.get("ok"):
+            brief_file.write_text(brief_output, encoding="utf-8")
+            print(f"Brief close report written to: {brief_file}")
+        else:
+            print(f"Brief validation failed: {brief_result.get('errors', [])}", file=sys.stderr)
+            if brief_output:
+                raw_brief = cache_dir / f"close_raw_brief_{target_date.isoformat()}.txt"
+                raw_brief.write_text(brief_output, encoding="utf-8")
+                print(f"Raw brief saved to: {raw_brief}", file=sys.stderr)
+
     return output_file
 
 

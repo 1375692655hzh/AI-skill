@@ -52,7 +52,8 @@ Every source has a date guard. After fetching, the skill checks whether the fetc
 
 ## Outputs
 
-- A single text file: `{output_dir}/{date}_close_report_zh.txt`
+- **完整版**：`{output_dir}/{date}_close_report_zh.txt`（800–1500 字）
+- **简报版**：`{output_dir}/{date}_close_report_brief_zh.txt`（400–650 字，【字段】结构化，个股每只一行）
 - Default output directory: `output/`
 
 ## Run Flow
@@ -64,8 +65,22 @@ Every source has a date guard. After fetching, the skill checks whether the fetc
 5. Run **source date verification**; discard stale cache and re-fetch if mismatched
 6. Build prompt from the template and collected data
 7. Call the configured LLM
-8. Validate output format
-9. Write file and return path
+8. Validate output format (full + brief)
+9. Write files and return paths
+
+Brief format (one field per line):
+
+```
+【土耳其股市收评简报 — {date}（周x）】
+指数：...
+汇率：...
+驱动：...
+个股：...
+板块：...
+信号：...
+操作：...
+风险：...
+```
 
 ## Data Sources
 
@@ -88,6 +103,8 @@ See `config.json`. Key knobs:
 | `cache_dir` | Where raw fetched data is cached |
 | `llm` | Provider, model, API key env var, base URL |
 | `holidays` | Turkish market holidays to skip |
+| `brief.enabled` | Generate structured brief version (default `true`) |
+| `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 400–650) |
 
 ## Format Rules
 

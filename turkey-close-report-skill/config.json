@@ -27,5 +27,13 @@
     "2026-08-30",
     "2026-10-29",
     "2026-12-31"
-  ]
+  ],
+  "brief": {
+    "enabled": true,
+    "template_path": "templates/close_report_brief_template.txt",
+    "min_chars": 400,
+    "max_chars": 650,
+    "max_tokens": 2000,
+    "temperature": 0.3
+  }
 }

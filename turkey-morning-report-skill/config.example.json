@@ -68,5 +68,13 @@
     "2026-07-15",
     "2026-08-30",
     "2026-10-29"
-  ]
+  ],
+  "brief": {
+    "enabled": true,
+    "template_path": "templates/morning_briefing_brief_template.txt",
+    "min_chars": 400,
+    "max_chars": 650,
+    "max_tokens": 2000,
+    "temperature": 0.3
+  }
 }
