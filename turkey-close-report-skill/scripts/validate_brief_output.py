@@ -20,6 +20,13 @@ REQUIRED_FIELDS = (
 )
 
 _STOCK_LINE_RE = re.compile(r"^[A-Z][A-Z0-9]{2,7}\s+\S")
+# 汉字 + 中文标点（全角符号、中文标点区）；不含英文 ticker / 数字 / 空白
+_CN_CHAR_RE = re.compile(r"[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]")
+
+
+def count_cn_chars(text: str) -> int:
+    """Count Chinese characters + Chinese/fullwidth punctuation only."""
+    return len(_CN_CHAR_RE.findall(text or ""))
 
 
 def _validate_stock_section(text: str, errors: list[str]) -> None:
@@ -41,15 +48,16 @@ def validate_brief(
     text: str,
     *,
     min_chars: int = 400,
-    max_chars: int = 650,
+    max_chars: int = 500,
 ) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
+    length = count_cn_chars(text)
 
-    if len(text) < min_chars:
-        errors.append(f"Brief too short (< {min_chars} chars).")
-    if len(text) > max_chars:
-        errors.append(f"Brief too long (> {max_chars} chars).")
+    if length < min_chars:
+        errors.append(f"Brief too short (< {min_chars} Chinese chars).")
+    if length > max_chars:
+        errors.append(f"Brief too long (> {max_chars} Chinese chars).")
 
     if "简报" not in text:
         errors.append("Missing brief title marker (简报).")
@@ -79,6 +87,6 @@ def validate_brief(
         "ok": len(errors) == 0,
         "errors": errors,
         "warnings": warnings,
-        "length": len(text),
+        "length": length,
         "attribution_hits": attribution.get("hits", []),
     }

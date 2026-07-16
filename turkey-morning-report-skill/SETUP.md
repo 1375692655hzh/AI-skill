@@ -77,7 +77,7 @@ python scripts/generate_briefing.py --config config.json --no-llm
 | 文件 | 说明 |
 |------|------|
 | `output/{日期}_daily_briefing_zh.txt` | 完整早评 |
-| `output/{日期}_daily_briefing_brief_zh.txt` | 结构化简报（400–650 字，个股每只一行） |
+| `output/{日期}_daily_briefing_brief_zh.txt` | 结构化简报（汉字+中文标点 400–500 字，个股每只一行） |
 
 关闭简报：`config.json` 中设 `"brief": {"enabled": false}`。
 

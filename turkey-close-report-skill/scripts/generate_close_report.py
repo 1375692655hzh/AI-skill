@@ -207,7 +207,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
             lambda text: validate_brief(
                 text,
                 min_chars=brief_cfg.get("min_chars", 400),
-                max_chars=brief_cfg.get("max_chars", 650),
+                max_chars=brief_cfg.get("max_chars", 500),
             ),
         )
         brief_file = output_dir / f"{target_date.isoformat()}_close_report_brief_zh.txt"

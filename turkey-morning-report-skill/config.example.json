@@ -73,7 +73,7 @@
     "enabled": true,
     "template_path": "templates/morning_briefing_brief_template.txt",
     "min_chars": 400,
-    "max_chars": 650,
+    "max_chars": 500,
     "max_tokens": 2000,
     "temperature": 0.3
   }

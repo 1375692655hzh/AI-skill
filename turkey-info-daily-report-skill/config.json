@@ -1,13 +1,14 @@
 {
   "workdir": ".",
   "output_dir": "output",
-  "cache_dir": ".cache/turkey-close-report",
+  "cache_dir": ".cache/turkey-info-daily-report",
   "target_date": "auto",
-  "template_path": "templates/close_report_template.txt",
+  "template_path": "templates/info_daily_report_template.txt",
   "sources": {
-    "bloomberght_closing": {
+    "info_daily": {
       "enabled": true,
-      "use_project_fetcher": false
+      "use_project_fetcher": false,
+      "project_path": "D:/AI项目/Turkey-investment"
     }
   },
   "llm": {
@@ -27,13 +28,5 @@
     "2026-08-30",
     "2026-10-29",
     "2026-12-31"
-  ],
-  "brief": {
-    "enabled": true,
-    "template_path": "templates/close_report_brief_template.txt",
-    "min_chars": 400,
-    "max_chars": 500,
-    "max_tokens": 2000,
-    "temperature": 0.3
-  }
+  ]
 }

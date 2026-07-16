@@ -170,7 +170,7 @@ def main() -> int:
             lambda text: validate_brief(
                 text,
                 min_chars=brief_cfg.get("min_chars", 400),
-                max_chars=brief_cfg.get("max_chars", 650),
+                max_chars=brief_cfg.get("max_chars", 500),
             ),
         )
         if brief_output and brief_validation.get("ok"):

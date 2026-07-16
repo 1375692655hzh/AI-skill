@@ -71,7 +71,7 @@ python scripts/generate_close_report.py --config config.json --no-llm
 | 文件 | 说明 |
 |------|------|
 | `output/{日期}_close_report_zh.txt` | 完整收评 |
-| `output/{日期}_close_report_brief_zh.txt` | 结构化简报（400–650 字，个股每只一行） |
+| `output/{日期}_close_report_brief_zh.txt` | 结构化简报（汉字+中文标点 400–500 字，个股每只一行） |
 
 关闭简报：`config.json` 中设 `"brief": {"enabled": false}`。
 

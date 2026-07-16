@@ -40,7 +40,7 @@ The skill is self-contained. A separate Turkey-investment project is **optional*
 ## Outputs
 
 - **完整版**：`{output_dir}/{today_date}_daily_briefing_zh.txt`（800–1200 字）
-- **简报版**：`{output_dir}/{today_date}_daily_briefing_brief_zh.txt`（400–650 字，【字段】结构化，个股每只一行）
+- **简报版**：`{output_dir}/{today_date}_daily_briefing_brief_zh.txt`（400–500 字，【字段】结构化，个股每只一行）
 - Default output directory is `output/` (relative to skill directory).
 - No WhatsApp, email, or other delivery is performed.
 
@@ -177,7 +177,7 @@ See `config.json` for the default configuration. Key knobs:
 | `llm` | Provider, model, base URL, temperature, API key env var. |
 | `holidays` | ISO dates when Borsa İstanbul is closed. |
 | `brief.enabled` | Generate structured brief version (default `true`). |
-| `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 400–650). |
+| `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 400–500). |
 
 ## Format Rules (Enforced by Prompt and Validator)
 
