@@ -1,0 +1,21 @@
+{
+  "workdir": ".",
+  "data_dir": "data",
+  "output_dir": "output",
+  "target_date": "auto",
+  "force_recollect": false,
+  "llm": {
+    "provider": "minimax",
+    "model": "MiniMax-M3",
+    "api_key_env": "MINIMAX_API_KEY",
+    "base_url": "https://api.minimaxi.com/v1",
+    "temperature": 0.4,
+    "max_tokens": 8000,
+    "timeout": 300
+  },
+  "holidays": [],
+  "opend": {
+    "comment": "Optional: Python with futu-api + OpenD on 127.0.0.1:11111",
+    "futu_python": ""
+  }
+}

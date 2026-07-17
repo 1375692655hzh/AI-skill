@@ -5,7 +5,7 @@
 ```
 AI-skill/
 ├── turkey/          # 土耳其 / BIST
-├── taiwan/          # 台湾（预留）
+├── taiwan/          # 台湾 / TWSE
 └── us/              # 美股（预留）
 ```
 
@@ -14,3 +14,12 @@ AI-skill/
 ## Turkey
 
 见 [turkey/README.md](turkey/README.md)。
+
+## Taiwan
+
+见 [taiwan/README.md](taiwan/README.md)。
+
+| Skill | 说明 |
+|-------|------|
+| `taiwan-afterhours-skill` | 台股盘后内参 |
+| `taiwan-premarket-skill` | 台股盘前早评 |
