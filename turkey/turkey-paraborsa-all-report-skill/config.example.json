@@ -1,0 +1,38 @@
+{
+  "workdir": ".",
+  "output_dir": "output",
+  "cache_dir": ".cache/turkey-paraborsa-all-report",
+  "target_date": "auto",
+  "template_path": "templates/summary_template.txt",
+  "fetch": {
+    "delay_seconds": 2.0,
+    "retry_on_429": 3,
+    "include_period_ranges": true,
+    "article_types": [
+      "borsa-yorumu",
+      "gun-ici-borsa-yorumu",
+      "viop-yorumu",
+      "haftalik-borsa-yorumu"
+    ]
+  },
+  "summary": {
+    "excerpt_chars_per_article": 5000,
+    "max_tokens": 12000,
+    "temperature": 0.3
+  },
+  "translate_concat": {
+    "enabled": true,
+    "batch_chars": 25000,
+    "temperature": 0.2,
+    "max_tokens": 12000
+  },
+  "llm": {
+    "provider": "minimax",
+    "model": "MiniMax-M3",
+    "api_key_env": "MINIMAX_API_KEY",
+    "base_url": "https://api.minimaxi.com/v1",
+    "temperature": 0.3,
+    "max_tokens": 12000
+  },
+  "holidays": []
+}
