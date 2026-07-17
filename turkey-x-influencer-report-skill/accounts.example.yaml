@@ -1,0 +1,299 @@
+# X/Twitter Influencer Watchlist for Turkey Investment
+# Synced from: Turkey-investment/skills/x-influencer-market-monitor
+# Copy to accounts.yaml, or set config.json → accounts_path.
+#
+# 拓展 / 删减（给 Agent 与同事）：
+# - 新增：在 accounts: 下追加一项（至少 handle + enabled: true）
+# - 删除：直接删掉该账号整块
+# - 临时关闭：enabled: false（保留条目，不抓取）
+# - 换名单文件：改 config.json 的 accounts_path 指向其他 yaml
+# 字段：handle(必填), name, homepage, priority(high|medium|low), notes, enabled, tier, rank
+# Last updated: 2026-07-09 — v0.4.0 core tier upgrade
+
+defaults:
+  timezone: Asia/Shanghai
+  hours: 6
+  per_account_limit: 40
+  language_hint: mixed
+  min_priority: low
+
+filters:
+  include_keywords:
+    - market - markets - stocks - equities - bonds - yields - inflation - rates
+    - Fed - ECB - earnings - guidance - oil - gold - dollar - FX - crypto
+    - Bitcoin - BTC - risk - volatility
+    - 投资 - 市场 - 股票 - 股市 - 美股 - 港股 - A股
+    - 债券 - 利率 - 通胀 - 汇率 - 美元 - 原油 - 黄金 - 加密 - 比特币
+    - piyasa - borsa - hisse - faiz - enflasyon - dolar
+    - bilanço - teknik analiz - destek - direnç - hedef fiyat
+    - KAP - temettü - kar - zarar - ciro - borç - nakit
+  exclude_keywords:
+    - giveaway - merch - birthday - vacation - meme
+    - 抽奖 - 生日 - 旅行 - 表情包
+
+accounts:
+  # ════════════════════════════════════════════════════════
+  # ★★★ 核心大V（Core Tier）— 每日必抓，优先级最高
+  # 排名依据：内容质量 × 影响力 × 实用性 × 稳定性
+  # ════════════════════════════════════════════════════════
+
+  # 排名1：bilanço深度分析 + 目标价 + Spaces直播
+  - handle: "@altinhisseler"
+    name: "ALTIN HİSSELER"
+    homepage: "https://x.com/altinhisseler"
+    tier: core
+    rank: 1
+    priority: high
+    notes: "BIST影响榜前列，财报拆解非常细致，常给目标价和逻辑。实用性极高。适合所有想做中线的基本面交易者。"
+    enabled: true
+
+  # 排名2：SPK持牌 + 数学工程师背景，bilanço分析极强（53万+粉丝）
+  - handle: "@TuncayTursucu"
+    name: "Tuncay Turşucu"
+    homepage: "https://x.com/TuncayTursucu"
+    tier: core
+    rank: 2
+    priority: high
+    notes: "SPK持牌分析师，数学工程师背景，财务报表分析专业且严谨，粉丝53万+，质量稳定。重视基本面和财报的投资者必看。"
+    enabled: true
+
+  # 排名3：数据工具 + 基金持仓，最好用的BIST数据平台
+  - handle: "@fintables"
+    name: "Fintables"
+    homepage: "https://x.com/fintables"
+    tier: core
+    rank: 3
+    priority: high
+    notes: "不是分析账号，而是最好用的数据平台。查财务数据、持仓、比率最快最全，决策前必看。适合所有人（尤其是做研究和验证的）。约40万粉丝。"
+    enabled: true
+
+  # 排名4：图形分析 + KAP资讯 + 进出场点位
+  - handle: "@baymucize"
+    name: "Bay Mucize"
+    homepage: "https://x.com/baymucize"
+    tier: core
+    rank: 4
+    priority: high
+    notes: "技术图形做得好，同时结合KAP新闻，给具体买卖点。交易党常用。适合技术交易者、短线/波段操作者。"
+    enabled: true
+
+  # 排名5：技术 + 基本面结合，VİOP期货分析
+  - handle: "@Viop_Analiz"
+    name: "VİOP Analiz"
+    homepage: "https://x.com/Viop_Analiz"
+    tier: core
+    rank: 5
+    priority: high
+    notes: "技术面和基本面结合较好，尤其适合做VİOP期货的交易者。适合期货+股票双做的投资者。"
+    enabled: true
+
+  # 排名6：潜力股跟踪 + 分析内容多
+  - handle: "@Borsayolundaa"
+    name: "Borsa Yolunda"
+    homepage: "https://x.com/Borsayolundaa"
+    tier: core
+    rank: 6
+    priority: high
+    notes: "经常分享个股分析和逻辑，内容量大且有一定深度。适合想找潜力股的中线投资者。"
+    enabled: true
+
+  # 排名7：个股/市场评论，影响力较高
+  - handle: "@KadirCalimbay"
+    name: "Kadir Çalımbay"
+    homepage: "https://x.com/KadirCalimbay"
+    tier: core
+    rank: 7
+    priority: high
+    notes: "影响力较高，个股点评较多，观点有一定参考价值。适合关注个股的人。"
+    enabled: true
+
+  # 排名8：22年BIST经验，前大行资深分析师
+  - handle: "@SerkannnKayaaaa"
+    name: "Serkan Kaya"
+    homepage: "https://x.com/SerkannnKayaaaa"
+    tier: core
+    rank: 8
+    priority: high
+    notes: "22年BIST经验，前İş Bankası & Garanti BBVA资深分析师，技术+基本面结合较扎实。适合有一定经验的交易者。"
+    enabled: true
+
+  # ════════════════════════════════════════════════════════
+  # 一、官方 / 机构类
+  # ════════════════════════════════════════════════════════
+
+  - handle: "@borsaistanbul"
+    name: "Borsa İstanbul 官方"
+    homepage: "https://x.com/borsaistanbul"
+    priority: high
+    notes: "收盘数据、IPO、官方公告，官方最权威来源"
+    enabled: true
+
+  - handle: "@memetsimsek"
+    name: "Mehmet Şimşek"
+    homepage: "https://x.com/memetsimsek"
+    priority: high
+    notes: "土耳其财政部部长，财政政策声明、宏观表态（约264万粉丝）"
+    enabled: true
+
+  - handle: "@InvestTurkey"
+    name: "Invest Turkey（土耳其投资办公室）"
+    homepage: "https://x.com/InvestTurkey"
+    priority: medium
+    notes: "官方土耳其投资办公室，宏观政策、投资环境、官方数据"
+    enabled: true
+
+  - handle: "@YFinansman"
+    name: "Yatırım Finansman"
+    homepage: "https://x.com/YFinansman"
+    priority: medium
+    notes: "老牌经纪商，教育性内容较多"
+    enabled: true
+
+  # ════════════════════════════════════════════════════════
+  # 二、前高管 / 权威宏观视角
+  # ════════════════════════════════════════════════════════
+
+  - handle: "@ibrahimmturhan2"
+    name: "İbrahim Turhan"
+    homepage: "https://x.com/ibrahimmturhan2"
+    priority: high
+    notes: "前Borsa İstanbul主席、土耳其央行前副主席，银行体系与政策权威"
+    enabled: true
+
+  - handle: "@AS_Akat"
+    name: "Asaf Savaş Akat"
+    homepage: "https://x.com/AS_Akat"
+    priority: medium
+    notes: "资深经济学家，宏观政策学术深度"
+    enabled: true
+
+  - handle: "@guskuay"
+    name: "Gökhan Uskuay"
+    homepage: "https://x.com/guskuay"
+    priority: medium
+    notes: "专业投资策略师，美元、利率、国际市场联动"
+    enabled: true
+
+  - handle: "@elerianm"
+    name: "Mohamed El-Erian"
+    homepage: "https://x.com/elerianm"
+    priority: medium
+    notes: "Allianz首席经济顾问，全球宏观大框架参考"
+    enabled: true
+
+  - handle: "@zoltanposzar"
+    name: "Zoltan Pozsar"
+    homepage: "https://x.com/zoltanposzar"
+    priority: medium
+    notes: "全球流动性、美元体系，流动性与地缘金融视角"
+    enabled: true
+
+  # ════════════════════════════════════════════════════════
+  # 三、技术 + 综合分析（非核心）
+  # ════════════════════════════════════════════════════════
+
+  - handle: "@BORSAIZINDE"
+    name: "Borsa İzinde"
+    homepage: "https://x.com/BORSAIZINDE"
+    priority: high
+    notes: "潜力股跟踪、实用风格，选股思路清晰"
+    enabled: true
+
+  - handle: "@PiyasaTurkiye"
+    name: "Piyasa Türkiye"
+    homepage: "https://x.com/PiyasaTurkiye"
+    priority: high
+    notes: "土耳其市场综合分析，市场日历与热点汇总"
+    enabled: true
+
+  - handle: "@muratcigerciogu"
+    name: "Murat Ciğercioğlu"
+    homepage: "https://x.com/muratcigerciogu"
+    priority: high
+    notes: "技术分析、BIST100图表点评，图表分析专业"
+    enabled: true
+
+  - handle: "@borsanalist_"
+    name: "BORSANALİST"
+    homepage: "https://x.com/borsanalist_"
+    priority: medium
+    notes: "BIST分析，风格较谨慎，有免责声明"
+    enabled: true
+
+  - handle: "@taaardu"
+    name: "Tardu"
+    homepage: "https://x.com/taaardu"
+    priority: medium
+    notes: "高互动BIST讨论"
+    enabled: true
+
+  - handle: "@barissoydan"
+    name: "Barış Soydan"
+    homepage: "https://x.com/barissoydan"
+    priority: medium
+    notes: "市场评论与分析"
+    enabled: true
+
+  - handle: "@ridvanozturgut"
+    name: "Rıdvan Özturgut"
+    homepage: "https://x.com/ridvanozturgut"
+    priority: medium
+    notes: "活跃市场观点"
+    enabled: true
+
+  - handle: "@BorsaAnalyst"
+    name: "Onurcan Deger (BorsaAnalyst)"
+    homepage: "https://x.com/BorsaAnalyst"
+    priority: medium
+    notes: "Trader风格，技术分析为主"
+    enabled: true
+
+  - handle: "@tahtaci_borsa"
+    name: "Tahtacı Borsa"
+    homepage: "https://x.com/tahtaci_borsa"
+    priority: medium
+    notes: "技术派活跃账号"
+    enabled: true
+
+  - handle: "@analitikyatirim"
+    name: "ANALİTİK YATIRIM"
+    homepage: "https://x.com/analitikyatirim"
+    priority: high
+    notes: "技术 + 基本 + takas（订单流）结合"
+    enabled: true
+
+  # ════════════════════════════════════════════════════════
+  # 四、基金 / 组合视角
+  # ════════════════════════════════════════════════════════
+
+  - handle: "@fonanalisti"
+    name: "Fon Analisti"
+    homepage: "https://x.com/fonanalisti"
+    priority: high
+    notes: "SPK持牌基金分析师，专注基金对比与资产配置"
+    enabled: true
+
+  # ════════════════════════════════════════════════════════
+  # 五、数据 / 媒体 / 其他
+  # ════════════════════════════════════════════════════════
+
+  - handle: "@data_kapital"
+    name: "Data Kapital"
+    homepage: "https://x.com/data_kapital"
+    priority: medium
+    notes: "BIST内容生产与影响分析媒体"
+    enabled: true
+
+  - handle: "@arifcoskun05"
+    name: "Algoritmarif"
+    homepage: "https://x.com/arifcoskun05"
+    priority: medium
+    notes: "可能带算法/量化风格"
+    enabled: true
+
+  - handle: "@Borsaemiliano"
+    name: "Borsa Emiliano"
+    homepage: "https://x.com/Borsaemiliano"
+    priority: medium
+    notes: "影响榜活跃的BIST讨论账号"
+    enabled: true
