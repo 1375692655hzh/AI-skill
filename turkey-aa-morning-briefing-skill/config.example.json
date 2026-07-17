@@ -1,0 +1,18 @@
+{
+  "workdir": ".",
+  "output_dir": "output",
+  "cache_dir": ".cache/turkey-aa-morning-briefing",
+  "target_date": "auto",
+  "skip_weekend": false,
+  "skip_holidays": true,
+  "output_filename": "{date}_aa_morning_briefing.txt",
+  "sources": {
+    "aa_morning_briefing": {
+      "search_url": "https://www.aa.com.tr/en/search?s=Morning+Briefing",
+      "world_url": "https://www.aa.com.tr/en/world",
+      "world_rss_url": "https://www.aa.com.tr/en/rss/default?cat=world",
+      "force_url": ""
+    }
+  },
+  "holidays": []
+}

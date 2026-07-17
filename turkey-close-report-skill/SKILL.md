@@ -102,7 +102,7 @@ See `config.json`. Key knobs:
 | `output_dir` | Where the finished report is saved |
 | `cache_dir` | Where raw fetched data is cached |
 | `llm` | Provider, model, API key env var, base URL |
-| `holidays` | Turkish market holidays to skip |
+| `holidays` | Optional extras only; fixed TR holidays auto-generated (Jun+ includes next year) |
 | `brief.enabled` | Generate structured brief version (default `true`) |
 | `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 400–500) |
 

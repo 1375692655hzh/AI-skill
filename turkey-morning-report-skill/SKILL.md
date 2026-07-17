@@ -175,7 +175,7 @@ See `config.json` for the default configuration. Key knobs:
 | `sources.news.search_engine` | Search API configuration (Tavily/Serper/Firecrawl). |
 | `sources.news.api` | API configuration for mode `api`. |
 | `llm` | Provider, model, base URL, temperature, API key env var. |
-| `holidays` | ISO dates when Borsa İstanbul is closed. |
+| `holidays` | Optional extras only; fixed TR holidays auto-generated (Jun+ includes next year). |
 | `brief.enabled` | Generate structured brief version (default `true`). |
 | `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 400–500). |
 

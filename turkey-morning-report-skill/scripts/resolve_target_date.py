@@ -4,14 +4,49 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
-from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 TR_TZ = timezone(timedelta(hours=3))
+
+# Fixed Turkish / BIST closed days (month, day). Religious movable holidays not included.
+FIXED_HOLIDAY_MD = (
+    (1, 1),
+    (4, 23),
+    (5, 1),
+    (5, 19),
+    (7, 15),
+    (8, 30),
+    (10, 29),
+)
 
 
 def now_tr() -> datetime:
     return datetime.now(TR_TZ)
+
+
+def today_tr() -> date:
+    return now_tr().date()
+
+
+def fixed_tr_holidays(ref: Optional[date] = None) -> List[str]:
+    """
+    Auto-generate fixed holidays for the reference year.
+    From June onward, also include the next calendar year.
+    """
+    if ref is None:
+        ref = today_tr()
+    years = [ref.year]
+    if ref.month >= 6:
+        years.append(ref.year + 1)
+    return [date(y, m, d).isoformat() for y in years for m, d in FIXED_HOLIDAY_MD]
+
+
+def merge_holidays(
+    extra: Optional[List[str]] = None,
+    ref: Optional[date] = None,
+) -> List[str]:
+    """Fixed auto holidays + optional config extras."""
+    return sorted(set(fixed_tr_holidays(ref)) | set(extra or []))
 
 
 def is_weekend(d: date) -> bool:
@@ -19,10 +54,9 @@ def is_weekend(d: date) -> bool:
 
 
 def load_holidays(holidays: Optional[list[str]]) -> set[date]:
-    if not holidays:
-        return set()
+    """Load extras + auto fixed holidays as a date set."""
     result = set()
-    for h in holidays:
+    for h in merge_holidays(holidays):
         try:
             result.add(date.fromisoformat(h))
         except ValueError:
@@ -46,6 +80,7 @@ def resolve_dates(
     """
     today_date: current Turkish trading day.
     target_date: most recent completed trading day for closing data.
+    `holidays` are optional extras; fixed TR holidays are always merged in.
     """
     if now is None:
         now = now_tr()
@@ -55,7 +90,6 @@ def resolve_dates(
     if forced_target:
         target = date.fromisoformat(forced_target)
         today = target  # For forced mode, assume today is the next trading day
-        # If target is weekend/holiday, adjust
         if is_weekend(target) or target in holiday_set:
             target = previous_trading_day(target + timedelta(days=1), holiday_set)
         return {
@@ -67,7 +101,6 @@ def resolve_dates(
 
     today = now.date()
 
-    # If today is a holiday or weekend, treat as a non-trading day request.
     if is_weekend(today) or today in holiday_set:
         target = previous_trading_day(today, holiday_set)
         return {
@@ -78,11 +111,10 @@ def resolve_dates(
             "holiday": True,
         }
 
-    # If before market open (TR 10:00), the most recent completed trading day is yesterday.
+    # Morning briefing always uses the previous close.
     if now.time() < time(10, 0):
         target = previous_trading_day(today, holiday_set)
     else:
-        # Market is open or has closed. For a morning briefing, we still use the previous close.
         target = previous_trading_day(today, holiday_set)
 
     return {
@@ -97,9 +129,9 @@ def resolve_dates(
 if __name__ == "__main__":
     import json, sys
 
-    # Optional CLI: --force 2026-07-10
     force = None
     if "--force" in sys.argv:
         idx = sys.argv.index("--force")
         force = sys.argv[idx + 1]
     print(json.dumps(resolve_dates(forced_target=force), ensure_ascii=False, indent=2))
+    print("holidays:", ", ".join(merge_holidays()))

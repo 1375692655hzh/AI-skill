@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Resolve the target close-report date in Turkey time."""
+"""Resolve the target briefing date in Turkey time (UTC+3)."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
@@ -47,40 +47,68 @@ def merge_holidays(
 
 
 def is_weekend(d: date) -> bool:
-    return d.weekday() >= 5  # Saturday=5, Sunday=6
+    return d.weekday() >= 5
 
 
 def is_holiday(d: date, holidays: Optional[List[str]] = None) -> bool:
     return d.isoformat() in (holidays or [])
 
 
-def previous_business_day(d: date, holidays: Optional[List[str]] = None) -> date:
+def previous_publish_day(
+    d: date,
+    holidays: Optional[List[str]] = None,
+    *,
+    skip_weekend: bool = False,
+) -> date:
+    """Walk backward to a day that is not skipped."""
     holidays = holidays or []
     while True:
         d -= timedelta(days=1)
-        if not is_weekend(d) and not is_holiday(d, holidays):
-            return d
+        if skip_weekend and is_weekend(d):
+            continue
+        if is_holiday(d, holidays):
+            continue
+        return d
 
 
 def resolve_target_date(
     forced: Optional[str] = None,
     holidays: Optional[List[str]] = None,
+    *,
+    skip_weekend: bool = False,
+    use_fixed_holidays: bool = True,
 ) -> date:
-    """`holidays` are optional extras; fixed TR holidays are always merged in."""
-    holidays = merge_holidays(holidays)
+    """
+    Default: today's date in Turkey time.
+
+    AA Morning Briefing often publishes on weekends; only holidays are skipped
+    by default. Set skip_weekend=True to walk back over Sat/Sun as well.
+    When use_fixed_holidays=True, `holidays` are optional extras merged with
+    auto-generated fixed TR holidays.
+    """
+    holidays = merge_holidays(holidays) if use_fixed_holidays else list(holidays or [])
     if forced:
         return date.fromisoformat(forced)
 
     today = today_tr()
-
-    if is_weekend(today) or is_holiday(today, holidays):
-        return previous_business_day(today, holidays)
+    if is_holiday(today, holidays) or (skip_weekend and is_weekend(today)):
+        return previous_publish_day(today, holidays, skip_weekend=skip_weekend)
     return today
 
 
-def is_trading_day_open(d: date, holidays: Optional[List[str]] = None) -> bool:
-    holidays = merge_holidays(holidays)
-    return not is_weekend(d) and not is_holiday(d, holidays)
+def is_publish_day(
+    d: date,
+    holidays: Optional[List[str]] = None,
+    *,
+    skip_weekend: bool = False,
+    use_fixed_holidays: bool = True,
+) -> bool:
+    holidays = merge_holidays(holidays) if use_fixed_holidays else list(holidays or [])
+    if is_holiday(d, holidays):
+        return False
+    if skip_weekend and is_weekend(d):
+        return False
+    return True
 
 
 if __name__ == "__main__":

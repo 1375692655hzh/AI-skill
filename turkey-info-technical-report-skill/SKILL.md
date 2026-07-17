@@ -110,7 +110,7 @@ Default output directory: `output/`
 | `sources.info_technical.use_project_fetcher` | Use Turkey-investment `fetch.py` (recommended for richer tables) |
 | `sources.info_technical.project_path` | Path to Turkey-investment project |
 | `llm` | Provider, model, API key env var (`max_tokens` ≥ 12000 recommended) |
-| `holidays` | Borsa İstanbul closed dates |
+| `holidays` | Optional extras only; fixed TR holidays auto-generated (Jun+ includes next year) |
 
 ## Format Rules
 
