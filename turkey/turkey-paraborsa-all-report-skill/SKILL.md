@@ -1,7 +1,7 @@
 ---
 name: turkey-paraborsa-all-report-skill
 description: Fetches ALL Paraborsa broker commentaries for a trading day via WordPress REST API and generates a Chinese synthesis report with ticker/source/view summary plus concatenated full texts. Use when the user asks for full Paraborsa broker roundup, all broker views, or comprehensive券商评论汇总.
-version: 1.0.0
+version: 1.1.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -68,8 +68,11 @@ python scripts/generate_paraborsa_all_report.py --config config.json
 ```
 【综合总结 — YYYY-MM-DD（周x）】
 宏观与市场共识
-个股覆盖汇总（表格：标的 | 提及券商 | 看法摘要）
-券商观点速览
+个股覆盖汇总（表格：标的 | 提及券商 | 看法摘要；优先高频标的）
+券商观点速览（主题综合三行，禁止 20+ 家逐条墙）：
+  技术位共识：…
+  宏观与事件：…
+  资金与标的：…
 分歧点
 
 【拼接内容 — YYYY-MM-DD（周x）】
@@ -78,6 +81,10 @@ python scripts/generate_paraborsa_all_report.py --config config.json
 ...
 ```
 
+### 券商观点速览怎么分配？
+
+旧规则是「每家 1–2 句全量罗列」，券商一多就会变成点位墙，难读。  
+**现行规则**：速览只做 **主题综合**（技术位 / 宏观事件 / 资金标的）；各家原文完整保留在【拼接内容】，不在速览里复读。
 ## Date Matching Rules
 
 计入目标日 `YYYY-MM-DD` 的文章：

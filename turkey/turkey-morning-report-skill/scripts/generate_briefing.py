@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -14,11 +15,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from build_brief_prompt import build_brief_prompt
 from build_prompt import build_prompt
+from bht_fact_sheet import format_closing_for_morning_prompt
 from fetch_bloomberght_closing import fetch_closing_review
+from fetch_live_quotes import fetch_live_quotes
 from fetch_news import fetch_news
 from llm_runner import generate_with_validation
 from resolve_target_date import resolve_dates
 from runtime_utils import configure_stdio, resolve_paths
+from fetch_aa_top_stories import fetch_aa_top_stories
+from news_fact_sheet import build_international_news_card
 from validate_brief_output import validate_brief
 from validate_output import validate
 
@@ -93,6 +98,14 @@ def main() -> int:
         print(f"Warning: closing review fetch failed: {closing.get('error')}", file=sys.stderr)
     closing_text = closing.get("text") or closing.get("error") or "无收盘数据"
 
+    live = fetch_live_quotes(cache_dir)
+    if not live.get("ok"):
+        print(f"Warning: live quotes fetch failed: {live.get('error')}", file=sys.stderr)
+    closing_material = format_closing_for_morning_prompt(
+        closing_text if closing.get("ok") else "",
+        live_fact_cn=live.get("fact_cn") or "",
+    )
+
     news_cfg = config.get("sources", {}).get("news", {})
     news = fetch_news(
         target_date=date.fromisoformat(target_date),
@@ -107,15 +120,42 @@ def main() -> int:
     breaking = bht.get("breaking_news", [])
     featured = bht.get("featured_news", [])
 
+    aa_cfg = news_cfg.get("aa_morning", {})
+    aa_titles: list[str] = []
+    if aa_cfg.get("enabled", True):
+        aa = fetch_aa_top_stories(
+            date.fromisoformat(today_date),
+            cache_dir,
+            aa_skill_dir=aa_cfg.get("skill_dir"),
+        )
+        if aa.get("ok"):
+            aa_titles = list(aa.get("titles") or [])
+            print(f"AA TOP STORIES: {len(aa_titles)} titles", file=sys.stderr)
+        else:
+            print(f"Warning: AA TOP STORIES unavailable: {aa.get('error')}", file=sys.stderr)
+
+    news_limit = int(aa_cfg.get("news_limit", news_cfg.get("international_limit", 3)))
+    news_card = build_international_news_card(
+        breaking,
+        featured,
+        aa_titles=aa_titles,
+        limit=news_limit,
+    )
+    news_parts.append(news_card)
+
     if breaking:
-        news_parts.append("【盘中突发】")
-        for item in breaking:
-            news_parts.append(item.get("title", ""))
+        news_parts.append("\n【盘中突发原题｜仅供核对，正文禁止署名】")
+        for item in breaking[:12]:
+            news_parts.append(item.get("title", "") if isinstance(item, dict) else str(item))
     if featured:
-        news_parts.append("\n【重点资讯】")
-        for item in featured:
-            news_parts.append(item.get("title", ""))
-    if not breaking and not featured:
+        news_parts.append("\n【重点资讯原题｜仅供核对，正文禁止署名】")
+        for item in featured[:12]:
+            news_parts.append(item.get("title", "") if isinstance(item, dict) else str(item))
+    if aa_titles:
+        news_parts.append("\n【AA重要资讯原题｜TOP STORIES，仅供核对，正文禁止署名】")
+        for t in aa_titles[:8]:
+            news_parts.append(t)
+    if not breaking and not featured and not aa_titles:
         if news["web_search"]["results"]:
             for item in news["web_search"]["results"]:
                 news_parts.append(f"{item.get('title', '')}: {item.get('snippet', '')}")
@@ -129,7 +169,7 @@ def main() -> int:
         template_path=template_path,
         today_date=today_date,
         target_date=target_date,
-        closing_text=closing_text,
+        closing_text=closing_material,
         news_text=news_text,
     )
 
@@ -151,6 +191,9 @@ def main() -> int:
 
     if validation.get("warnings"):
         print(f"Validation warnings: {validation['warnings']}", file=sys.stderr)
+
+    # 只要换行、不要空行
+    output = re.sub(r"\n{2,}", "\n", output.replace("\r\n", "\n")).strip() + "\n"
 
     output_file.write_text(output, encoding="utf-8")
     print(f"Briefing written to: {output_file}")

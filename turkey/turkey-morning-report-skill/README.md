@@ -113,9 +113,10 @@ python scripts/generate_briefing.py --force-date 2026-07-10 --config config.json
 
 | 来源 | 内容 | 自动抓取 |
 |------|------|---------|
-| BloombergHT 收盘总结 | BIST 100、板块、汇率、黄金、原油、加密货币 | ✅ |
+| BloombergHT 收盘总结 | BIST 100、板块、个股（供事实卡） | ✅ |
+| BloombergHT `/piyasalar` 最新报价 | USD/TRY、EUR/TRY、金、油（供汇市节） | ✅ |
 | BloombergHT 突发新闻 | 伊朗、霍尔木兹、特朗普、OPEC、美联储 | ✅ |
-| BloombergHT 重点新闻 | JPMorgan、Morgan Stanley、大众裁员、经济数据 | ✅ |
+| BloombergHT 重点新闻 | 机构观点、重大公司/宏观事件 | ✅ |
 | Tavily/Serper/Firecrawl | 国际财经新闻补充 | 可选 |
 
 ---

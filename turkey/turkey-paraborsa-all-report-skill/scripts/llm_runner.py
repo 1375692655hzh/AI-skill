@@ -57,12 +57,20 @@ def generate_with_validation(
             return None, {"ok": False, "errors": [str(exc)], "warnings": []}
 
     length_errors = [e for e in validation.get("errors", []) if "too short" in e or "too long" in e]
-    if not validation["ok"] and length_errors:
+    structure_errors = [
+        e
+        for e in validation.get("errors", [])
+        if "券商观点速览" in e or "structured slot" in e or "per-broker wall" in e
+    ]
+    if not validation["ok"] and (length_errors or structure_errors):
         fix_prompt = (
             prompt
-            + "\n\n【重要修订】你上一版草稿字数不合格。"
-            "请重写：总字数必须落在要求范围内（不要太短也不要超标）。"
-            "【个股】每只一行一句话，其余字段各1-2句。"
+            + "\n\n【重要修订】上一版不合格："
+            + "；".join(structure_errors + length_errors)
+            + "。请重写【综合总结】："
+            "券商观点速览必须且只能写成三行——"
+            "技术位共识：……\\n宏观与事件：……\\n资金与标的：……；"
+            "禁止 A1 Capital：/Destek：这类逐家罗列；完整原文不在速览里。"
         )
         try:
             output = call_llm(

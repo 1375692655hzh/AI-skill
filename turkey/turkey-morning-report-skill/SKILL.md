@@ -1,7 +1,7 @@
 ---
 name: turkey-morning-report-skill
 description: Use when generating a Turkish stock market morning briefing in Chinese, based on the previous trading day's closing review and overnight/ weekend news.
-version: 2.0.0
+version: 2.1.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -185,17 +185,17 @@ The briefing must be a single Chinese text file with this structure and style:
 
 - Only `【】` as section headers. No `##`, `===`, `---`, or other Markdown.
 - No tables, bullets, emojis, bold/italic markers, or numbered lists.
-- Paragraphs only. Numbers and data are embedded in flowing sentences.
-- **Line break rule**: Within a `【】` section, if discussing different topics (e.g., different stocks, different sectors, different commodities), separate each topic with a blank line for clarity. Sentences within the same topic remain in a continuous paragraph.
-- Total length: 800–1200 Chinese characters.
+- **换行只要分行、不要空行**（落盘会折叠多余空行）。
 - Sections:
-  1. `【土耳其股市早评 — {today date}】` + one-paragraph core view.
-  2. `【国际新闻】` (2–3 items, written as prose).
-  3. `【关键个股】` (2–3 stocks, one paragraph each, separated by blank lines).
-  4. `【行业板块表现】` (leading/lagging sectors + observation, one paragraph).
-  5. `【汇市与大宗商品】` (USD/TRY, EUR/TRY, oil, gold, one paragraph).
-  6. `【今日操作参考】` (positioning, levels, avoid-list).
-  7. `风险提示：` (one line, not a separate section).
+  1. `【土耳其股市早评 — {today date}】` + `核心观点：`
+  2. `【国际新闻】` — **仅用 BHT 突发/重点标题素材卡**，2–3 条、每条一行
+  3. `【关键个股】` — **BHT only**（成交额亿里拉 / 涨幅居前 / 跌幅居前，各占一行）
+  4. `【行业板块表现】` — **BHT only**
+  5. `【汇市与大宗商品】` — **盘前最新报价**（BloombergHT `/piyasalar` 实时抓取，禁止钟点）
+  6. `【今日操作参考】` — 三槽各占一行：`仓位：` / `点位：` / `回避：`
+  7. `风险提示：`
+
+Prompt plumbing: `scripts/bht_fact_sheet.py` builds the stock/sector fact card from prior-day BHT close; `scripts/fetch_live_quotes.py` refreshes FX/gold/oil; `scripts/news_fact_sheet.py` merges BHT headlines + AA `TOP STORIES` (via sibling `turkey-aa-morning-briefing-skill`) with topic dedupe for `【国际新闻】`.
 
 ## Example Invocation
 

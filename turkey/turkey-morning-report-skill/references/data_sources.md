@@ -22,6 +22,30 @@ Fetcher strategy:
 4. Extract the article body using a generic HTML reader (requests + BeautifulSoup or an MCP reader).
 5. Cache raw HTML and extracted text.
 
+**BHT-only factual sections（前一交易日收盘）：** `【关键个股】`、`【行业板块表现】`。成交额写「亿里拉」，不加分析。
+
+## Live Quotes: BloombergHT Piyasalar（盘前最新）
+
+| Field | Value |
+|-------|-------|
+| Source | BloombergHT live market page |
+| URL | `https://www.bloomberght.com/piyasalar` |
+| Used for | `【汇市与大宗商品】` only |
+| Fields | USD/TRY, EUR/TRY, ALTIN/ONS, GRAM ALTIN, BRENT (+ pct) |
+| Script | `scripts/fetch_live_quotes.py` |
+
+## AA Morning Briefing TOP STORIES（重要资讯补充）
+
+| Field | Value |
+|-------|-------|
+| Source | Anadolu Agency English Morning Briefing |
+| Section used | **TOP STORIES** only（不用 NEWS IN BRIEF） |
+| Skill | Sibling `turkey-aa-morning-briefing-skill` |
+| Script | `scripts/fetch_aa_top_stories.py` |
+| Merge | With BHT breaking/featured in `news_fact_sheet.py`，按主题指纹去重后写入国际新闻素材卡 |
+
+Recommended AA publish window is earlier than the stock morning report cron (BJ ~12:10+); by BJ 14:30 AA is usually available.
+
 ## Supplementary Sources
 
 ### Web Search
