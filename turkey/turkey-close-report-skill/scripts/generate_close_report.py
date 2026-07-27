@@ -23,6 +23,7 @@ from resolve_target_date import resolve_target_date, today_tr, is_trading_day_op
 from runtime_utils import configure_stdio, resolve_paths
 from validate_brief_output import validate_brief
 from validate_output import validate
+from bht_fact_sheet import format_bloomberght_for_prompt
 
 
 WEEKDAYS_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -45,19 +46,8 @@ def resolve_brief_template(skill_dir: Path, config: dict) -> Path | None:
 
 
 def format_bloomberght(data: dict) -> str:
-    lines = []
-    if data.get("closing_review", {}).get("text"):
-        lines.append("【收盘数据】")
-        lines.append(data["closing_review"]["text"][:8000])
-    if data.get("breaking_news"):
-        lines.append("\n【盘中突发】")
-        for title in data["breaking_news"]:
-            lines.append(title)
-    if data.get("featured_news"):
-        lines.append("\n【重点资讯】")
-        for title in data["featured_news"]:
-            lines.append(title)
-    return "\n".join(lines)
+    """BHT close text: TL→亿里拉, strip clocks, plus Chinese fact card for four sections."""
+    return format_bloomberght_for_prompt(data)
 
 
 def format_paraborsa(data: dict) -> str:
@@ -182,6 +172,9 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
 
     if result.get("warnings"):
         print(f"Validation warnings: {result['warnings']}")
+
+    # 只要换行、不要空行：折叠多余空行
+    content = re.sub(r"\n{2,}", "\n", content.replace("\r\n", "\n")).strip() + "\n"
 
     output_file = output_dir / f"{target_date.isoformat()}_close_report_zh.txt"
     output_file.write_text(content, encoding="utf-8")

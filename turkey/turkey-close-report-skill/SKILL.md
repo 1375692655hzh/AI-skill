@@ -1,7 +1,7 @@
 ---
 name: turkey-close-report-skill
 description: Use when generating a Turkish stock market close-of-day report in Chinese, based on the same-day BloombergHT closing review, Paraborsa broker commentary, and Info Yatırım bulletins.
-version: 1.1.0
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -25,12 +25,22 @@ Unlike the morning report, the close report:
 
 | Source | Role | Content |
 |--------|------|---------|
-| BloombergHT Piyasalarda günün özeti | **Primary** | BIST 100 close, sectors, stocks, FX, commodities, volume |
-| Paraborsa broker commentary | Supplementary | Broker views, technical levels, stock picks |
-| Info Yatırım daily bulletin | Supplementary | Pre-market summary and outlook |
-| Info Yatırım technical bulletin | Supplementary | Support/resistance, technical signals |
+| BloombergHT Piyasalarda günün özeti | **Primary / 事实唯一来源** | BIST 100 close, sectors, stocks, FX, commodities, volume |
+| Paraborsa broker commentary | Supplementary（仅观点节） | Broker views, technical levels, stock picks |
+| Info Yatırım daily bulletin | Supplementary（仅观点节） | Pre-market summary and outlook |
+| Info Yatırım technical bulletin | Supplementary（仅观点节） | Support/resistance, technical signals |
 
-**Important:** Closing figures (BIST 100 close, change %, volume, USD/TRY, EUR/TRY, gold, oil) must come from BloombergHT. The supplementary sources are only used for technical levels, broker opinions, and market sentiment.
+**BHT-only factual sections（禁止分析、禁止补数）：**
+
+1. `【大盘概况】`
+2. `【关键个股异动】`（成交额居前 + 涨幅居前 + 跌幅居前）
+3. `【行业板块表现】`（上涨板块 + 跌幅板块）
+4. `【汇市与大宗商品】`
+
+以上四节数字与名单必须 100% 来自 BloombergHT；成交额统一写「亿里拉」；汇市/大宗不得出现 `18:30` 等钟点。  
+`【核心信号与逻辑】` / `【后市策略参考】` 才可用 Paraborsa / Info 的观点与技术位，且不得覆盖 BHT 收盘数字。
+
+**Important:** Closing figures (BIST 100 close, change %, volume, USD/TRY, EUR/TRY, gold, oil) must come from BloombergHT. The supplementary sources are only used for technical levels, broker opinions, and market sentiment — never for the four factual sections above.
 
 ### Source Date Verification
 
@@ -91,7 +101,9 @@ Brief format (one field per line):
 | Info Yatırım 每日公告 | TR ~11:00 | Supplementary | Daily bulletin, stock recommendations |
 | Info Yatırım 技术分析 | TR ~12:00 | Supplementary | Technical analysis, support/resistance |
 
-Closing numbers and index changes must come from BloombergHT. The other sources are used only for technical levels, broker opinions, and sentiment.
+Closing numbers and index changes must come from BloombergHT. The other sources are used only for technical levels, broker opinions, and sentiment — and only inside `【核心信号与逻辑】` / `【后市策略参考】`.
+
+Prompt plumbing: `scripts/bht_fact_sheet.py` converts BHT TL amounts to 「亿里拉」, strips clock stamps, and injects a Chinese **BHT事实卡** so the four factual sections can be copied without analysis.
 
 ## Configuration
 
@@ -112,12 +124,12 @@ See `config.json`. Key knobs:
 - No tables, bullets, emojis, bold/italic markers
 - Sections:
   1. `【土耳其股市收评 — {date}（{weekday}）】` + 核心结论
-  2. `【大盘概况】`
-  3. `【关键个股异动】`
-  4. `【行业板块表现】`
-  5. `【汇市与大宗商品】`
-  6. `【核心信号与逻辑】`
-  7. `【后市策略参考】`
+  2. `【大盘概况】` — **BHT only, no analysis**
+  3. `【关键个股异动】` — **BHT only, 亿里拉, no analysis**
+  4. `【行业板块表现】` — **BHT only, no analysis**
+  5. `【汇市与大宗商品】` — **BHT only, no clock stamps**
+  6. `【核心信号与逻辑】` — 三槽各占一行（换行、槽间不空行）：`驱动：` / `技术：` / `资金情绪：`
+  7. `【后市策略参考】` — 三槽各占一行（换行、槽间不空行）：`仓位：` / `点位：` / `回避：`
   8. `风险提示：`
 
 ## Example Invocation

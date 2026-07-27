@@ -56,13 +56,25 @@ def generate_with_validation(
         except Exception as exc:
             return None, {"ok": False, "errors": [str(exc)], "warnings": []}
 
-    length_errors = [e for e in validation.get("errors", []) if "too short" in e or "too long" in e]
-    if not validation["ok"] and length_errors:
+    structure_errors = [
+        e
+        for e in validation.get("errors", [])
+        if "structured slots" in e or "too many sentences" in e or "start a new line" in e or "consecutive lines" in e
+    ]
+    length_errors = [
+        e
+        for e in validation.get("errors", [])
+        if "too short" in e or "too long" in e
+    ]
+    if not validation["ok"] and (structure_errors or length_errors):
         fix_prompt = (
             prompt
-            + "\n\n【重要修订】你上一版草稿字数不合格。"
-            "请重写：总字数必须落在要求范围内（不要太短也不要超标）。"
-            "【个股】每只一行一句话，其余字段各1-2句。"
+            + "\n\n【重要修订】你上一版草稿结构不合格："
+            + "；".join(structure_errors + length_errors)
+            + "。请重写整篇："
+            "【核心信号与逻辑】必须写成三行（换行、不要空行）：驱动：……。\\n技术：……。\\n资金情绪：……。；"
+            "【后市策略参考】必须写成三行（换行、不要空行）：仓位：……。\\n点位：……。\\n回避：……。；"
+            "严禁把三槽挤在同一行；四节事实仍须严格复述BHT事实卡；其余格式铁律不变。"
         )
         try:
             output = call_llm(

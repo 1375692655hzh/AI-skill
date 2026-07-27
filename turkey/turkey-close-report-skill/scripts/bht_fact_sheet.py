@@ -1,0 +1,328 @@
+# -*- coding: utf-8 -*-
+"""Build a BHT-only Chinese fact sheet for close-report factual sections."""
+from __future__ import annotations
+
+import re
+from typing import Optional
+
+
+# Turkish sector name -> Chinese (BHT wording)
+SECTOR_CN = {
+    "ulaştirma": "运输",
+    "ulastirma": "运输",
+    "bilişim": "信息",
+    "bilisim": "信息",
+    "ticaret": "商业",
+    "kimya petrol plastik": "化工石油塑料",
+    "taş toprak": "陶瓷土石",
+    "tas toprak": "陶瓷土石",
+    "teknoloji": "科技",
+}
+
+
+def _tr_int(token: str) -> Optional[int]:
+    """Parse TR/EU integer with '.' thousand separators: 16.555.811.753"""
+    raw = token.replace(" ", "").replace(",", "")
+    if not re.fullmatch(r"\d+(\.\d{3})*", raw) and not re.fullmatch(r"\d+", raw.replace(".", "")):
+        # allow 16.555.811.753
+        digits = raw.replace(".", "")
+        if digits.isdigit():
+            return int(digits)
+        return None
+    digits = raw.replace(".", "")
+    if digits.isdigit():
+        return int(digits)
+    return None
+
+
+def _tr_float_price(token: str) -> Optional[float]:
+    """Parse index/fx style: 13.774.77 or 13.774,77 or 47.35 or 4,076 or 6.205,49 or 64.667"""
+    t = token.strip().replace(" ", "")
+    if not t:
+        return None
+    # strip trailing dots from truncated "0.57..."
+    t = t.rstrip(".")
+    # 4,076 -> 4076 (US thousands)
+    if re.fullmatch(r"\d{1,3}(,\d{3})+", t):
+        return float(t.replace(",", ""))
+    # 6.205,49 or 13.773,98 (TR decimal comma)
+    if "," in t and "." in t:
+        return float(t.replace(".", "").replace(",", "."))
+    if "," in t:
+        return float(t.replace(",", "."))
+    # 13.774.77 (dots as thousands + 2-dec) OR 64.667 (thousand grouping, no decimals)
+    if t.count(".") >= 2:
+        parts = t.split(".")
+        if len(parts[-1]) == 3 and all(p.isdigit() for p in parts):
+            # 64.667 / 16.555.811.753 style integer groups
+            return float("".join(parts))
+        return float("".join(parts[:-1]) + "." + parts[-1])
+    if t.count(".") == 1:
+        left, right = t.split(".")
+        # 64.667 -> 64667 when right side is 3 digits (thousand group)
+        if left.isdigit() and right.isdigit() and len(right) == 3 and len(left) <= 3:
+            return float(left + right)
+        return float(t)
+    if t.isdigit():
+        return float(t)
+    return None
+
+
+def _fmt_pts(v: float) -> str:
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return f"{v:.2f}".rstrip("0").rstrip(".")
+
+
+def tl_to_yi_str(amount: int) -> str:
+    yi = amount / 1e8
+    s = f"{yi:.2f}".rstrip("0").rstrip(".")
+    return f"{s}亿里拉"
+
+
+def normalize_bht_text(text: str) -> str:
+    """Convert raw TL amounts to 亿里拉; strip clock stamps like 18:30."""
+    if not text:
+        return ""
+
+    def repl_tl(m: re.Match) -> str:
+        n = _tr_int(m.group(1))
+        if n is None:
+            return m.group(0)
+        return tl_to_yi_str(n)
+
+    out = re.sub(
+        r"(\d{1,3}(?:\.\d{3})+)\s*TL",
+        repl_tl,
+        text,
+        flags=re.I,
+    )
+    # saat 18:30 itibariyle / 18:30 itibariyle
+    out = re.sub(r"saat\s*\d{1,2}:\d{2}\s*itibariyle\s*", "", out, flags=re.I)
+    out = re.sub(r"\d{1,2}:\d{2}\s*itibariyle\s*", "", out, flags=re.I)
+    out = re.sub(r"（?\s*18:30\s*）?", "", out)
+    out = re.sub(r"\b18:30\b", "", out)
+    return out
+
+
+def build_bht_fact_sheet(closing_text: str) -> str:
+    """Extract factual lines for 大盘/个股/板块/汇市大宗 — Chinese, no analysis."""
+    raw = closing_text or ""
+    # Strip clocks first so "saat 18:30" does not break gold/oil number capture.
+    text = normalize_bht_text(raw)
+    lines: list[str] = []
+    lines.append(
+        "【BHT事实卡｜【大盘概况】【关键个股异动】【行业板块表现】【汇市与大宗商品】"
+        "四节只能复述本卡事实，禁止分析、因果、补点位、补涨跌幅、补分时；"
+        "里拉成交额必须用「亿里拉」；汇市大宗禁止写任何钟点。】"
+    )
+
+    # --- index ---
+    high_m = re.search(r"en yüksek\s*([\d.,]+)\s*puan", text, re.I)
+    low_m = re.search(r"en düşük\s*([\d.,]+)\s*puan", text, re.I)
+
+    lines.append("【大盘概况事实】")
+    bits: list[str] = []
+    m0 = re.search(
+        r"yüzde\s*(-?[\d.,]+)\s*değer kaybederek\s*([\d.]+)\s*puanla",
+        text,
+        re.I,
+    )
+    if not m0:
+        m0 = re.search(
+            r"%\s*(-?[\d.,]+)\s*düşüşle\s*([\d.]+)\s*puandan",
+            text,
+            re.I,
+        )
+    if m0:
+        chg = m0.group(1).replace(",", ".").lstrip("+")
+        close_v = _tr_float_price(m0.group(2))
+        if close_v is not None:
+            chg_disp = chg[1:] if chg.startswith("-") else chg
+            bits.append(f"BIST 100 收跌 {chg_disp}%")
+            bits.append(f"收盘 {_fmt_pts(close_v)} 点")
+
+    high_v = _tr_float_price(high_m.group(1)) if high_m else None
+    low_v = _tr_float_price(low_m.group(1)) if low_m else None
+    if high_v is not None:
+        bits.append(f"最高 {_fmt_pts(high_v)} 点")
+    if low_v is not None:
+        bits.append(f"最低 {_fmt_pts(low_v)} 点")
+    if high_v is not None and low_v is not None:
+        bits.append(f"振幅约 {high_v - low_v:.0f} 点")
+    lines.append("；".join(bits) + "。" if bits else "（收盘综述未解析到指数字段）")
+
+    # --- stocks ---
+    lines.append("【关键个股异动事实】")
+    # Match on raw TL amounts (normalize already rewrote them to 亿里拉 in `text`)
+    vols = re.findall(
+        r"\b([A-Z]{3,6})\s*\((\d{1,3}(?:\.\d{3})+)\s*TL\)",
+        raw,
+    )
+    if vols:
+        parts = []
+        for code, num in vols[:5]:
+            n = _tr_int(num)
+            if n is not None:
+                parts.append(f"{code} {tl_to_yi_str(n)}")
+        if parts:
+            lines.append("成交额前三：" + "，".join(parts) + "。")
+    gain = re.search(
+        r"En çok artan hisseler\s+([A-Za-z0-9_,\s]+?)\s+olurken",
+        text,
+        re.I,
+    )
+    lose = re.search(
+        r"en çok azalan hisseler\s+([A-Za-z0-9_,\s]+?)\s+olarak",
+        text,
+        re.I,
+    )
+
+    def _codes(blob: str) -> str:
+        codes = [x.strip().upper() for x in blob.split(",") if x.strip()]
+        return "、".join(codes)
+
+    if gain:
+        lines.append(f"涨幅居前：{_codes(gain.group(1))}。")
+    if lose:
+        lines.append(f"跌幅居前：{_codes(lose.group(1))}。")
+
+    # --- sectors ---
+    lines.append("【行业板块表现事实】")
+    sec = re.search(
+        r"sektörel bazda\s+(.+?)\s+sektörleri yükselirken,\s+(.+?)\s+(?:hisseleri\s+)?en çok düşüş",
+        text,
+        re.I | re.S,
+    )
+    if sec:
+        up_raw = sec.group(1)
+        down_raw = sec.group(2)
+        up = _map_sectors(up_raw)
+        down = _map_sectors(down_raw)
+        lines.append("上涨板块：" + "、".join(up) + "。")
+        lines.append("跌幅居前板块：" + "、".join(down) + "。")
+
+    # --- fx / commodities ---
+    lines.append("【汇市与大宗商品事实】")
+    fx_bits = []
+    usd = re.search(r"Dolar/TL.*?%([\d.,]+)\s*artışla\s*([\d.,]+)\s*TL", text, re.I | re.S)
+    if usd:
+        fx_bits.append(
+            f"美元/里拉上涨 {usd.group(1).replace(',', '.')}%，报 {usd.group(2).replace(',', '.')} "
+        )
+    eur = re.search(r"Euro/TL.*?%([\d.,]+)\s*artışla\s*([\d.,]+)\s*TL", text, re.I | re.S)
+    if eur:
+        fx_bits.append(
+            f"欧元/里拉上涨 {eur.group(1).replace(',', '.')}%，报 {eur.group(2).replace(',', '.')}"
+        )
+    if fx_bits:
+        lines.append("；".join(fx_bits).strip() + "。")
+
+    oz = re.search(
+        r"ons altın.*?([\d.,]+)\s*dolar.*?%\s*([\d.,]+)",
+        text,
+        re.I | re.S,
+    )
+    gram = re.search(
+        r"gram altın\s*%\s*([\d.,]+)\s*artışla\s*([\d.,]+)\s*lira",
+        text,
+        re.I,
+    )
+    gold_bits = []
+    if oz:
+        pct = oz.group(2).replace(",", ".").rstrip(".")
+        gold_bits.append(
+            f"国际金价报 {_fmt_pts(_tr_float_price(oz.group(1)) or 0)} 美元/盎司，较前一日变动 +{pct}%"
+        )
+    if gram:
+        gold_bits.append(
+            f"克金报 {_fmt_pts(_tr_float_price(gram.group(2)) or 0)} 里拉，较前一日上涨 {gram.group(1).replace(',', '.')}%"
+        )
+    cq = re.search(
+        r"Çeyrek altının alış fiyatı.*?([\d.,]+)\s*TL.*?satış fiyatı\s*([\d.,]+)\s*TL",
+        text,
+        re.I | re.S,
+    )
+    if cq:
+        gold_bits.append(
+            f"四分之一金币买价 {_fmt_pts(_tr_float_price(cq.group(1)) or 0)} 里拉、"
+            f"卖价 {_fmt_pts(_tr_float_price(cq.group(2)) or 0)} 里拉"
+        )
+    cum = re.search(r"Cumhuriyet altını.*?([\d.,]+)\s*lira", text, re.I)
+    if cum:
+        gold_bits.append(f"共和国金币报 {_fmt_pts(_tr_float_price(cum.group(1)) or 0)} 里拉")
+    if gold_bits:
+        lines.append("；".join(gold_bits) + "。")
+
+    brent = re.search(r"Brent petrol.*?([\d.,]+)\s*dolar", text, re.I | re.S)
+    if brent:
+        lines.append(f"布伦特报 {_fmt_pts(_tr_float_price(brent.group(1)) or 0)} 美元。")
+
+    btc = re.search(r"Bitcoin\s*\$?\s*([\d.]+)", text, re.I)
+    eth = re.search(r"Ethereum\s*\$?\s*([\d.,]+)", text, re.I)
+    crypto = []
+    if btc:
+        crypto.append(f"比特币报 {_fmt_pts(_tr_float_price(btc.group(1)) or 0)} 美元")
+    if eth:
+        crypto.append(f"以太坊报 {_fmt_pts(_tr_float_price(eth.group(1)) or 0)} 美元")
+    if crypto:
+        lines.append("；".join(crypto) + "。")
+
+    return "\n".join(lines)
+
+
+def _map_sectors(raw: str) -> list[str]:
+    norm = (
+        raw.lower()
+        .replace("ı", "i")
+        .replace("İ", "i")
+        .replace("ş", "s")
+        .replace("ç", "c")
+        .replace("ğ", "g")
+        .replace("ü", "u")
+        .replace("ö", "o")
+    )
+    # split on comma / ve / and
+    parts = re.split(r",| ve | ve,", raw)
+    out: list[str] = []
+    for p in parts:
+        key = (
+            p.strip()
+            .lower()
+            .replace("ı", "i")
+            .replace("ş", "s")
+            .replace("ç", "c")
+            .replace("ğ", "g")
+            .replace("ü", "u")
+            .replace("ö", "o")
+        )
+        key = re.sub(r"\s+", " ", key).strip()
+        if not key:
+            continue
+        if key in SECTOR_CN:
+            out.append(SECTOR_CN[key])
+            continue
+        # fuzzy contains
+        hit = None
+        for k, v in SECTOR_CN.items():
+            if k in key or key in k:
+                hit = v
+                break
+        out.append(hit or p.strip())
+    return out
+
+
+def format_bloomberght_for_prompt(data: dict) -> str:
+    """Closing text normalized + fact sheet; optional news kept outside factual-card scope."""
+    raw = (data.get("closing_review") or {}).get("text") or ""
+    normalized = normalize_bht_text(raw)
+    sheet = build_bht_fact_sheet(raw)
+    blocks = ["【收盘数据｜已换算亿里拉、已去掉钟点】", normalized, "", sheet]
+    # News intentionally NOT required for the four factual sections
+    if data.get("breaking_news"):
+        blocks.append("\n【盘中突发｜仅供【核心信号与逻辑】可选引用标题，禁止写进大盘/个股/板块/汇市四节】")
+        blocks.extend(data["breaking_news"])
+    if data.get("featured_news"):
+        blocks.append("\n【重点资讯｜仅供【核心信号与逻辑】可选引用标题，禁止写进大盘/个股/板块/汇市四节】")
+        blocks.extend(data["featured_news"])
+    return "\n".join(blocks)
