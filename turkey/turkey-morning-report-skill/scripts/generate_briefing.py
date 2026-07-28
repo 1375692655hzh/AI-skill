@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_brief_prompt import build_brief_prompt
 from build_prompt import build_prompt
 from bht_fact_sheet import format_closing_for_morning_prompt
-from fetch_bloomberght_closing import fetch_closing_review
+from fetch_bloomberght_closing import fetch_closing_review, fetch_today_headlines
 from fetch_live_quotes import fetch_live_quotes
 from fetch_news import fetch_news
 from llm_runner import generate_with_validation
@@ -116,9 +116,24 @@ def main() -> int:
     )
 
     news_parts = []
-    bht = news.get("bloomberght", {})
-    breaking = bht.get("breaking_news", [])
-    featured = bht.get("featured_news", [])
+    # 国际/突发只用「今日(TR)」：禁止复用昨收缓存里的 SON DAKİKA / 旧重点稿
+    today_headlines = fetch_today_headlines(date.fromisoformat(today_date))
+    breaking = today_headlines.get("breaking_news", [])
+    featured = today_headlines.get("featured_news", [])
+    # persist for audit (do not mix into yesterday's bloomberght_all cache)
+    (cache_dir / f"bht_today_headlines_{today_date}.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "today_date": today_date,
+                "breaking_news": breaking,
+                "featured_news": featured,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     aa_cfg = news_cfg.get("aa_morning", {})
     aa_titles: list[str] = []
@@ -144,15 +159,15 @@ def main() -> int:
     news_parts.append(news_card)
 
     if breaking:
-        news_parts.append("\n【盘中突发原题｜仅供核对，正文禁止署名】")
+        news_parts.append(f"\n【今日突发原题｜{today_date}｜仅供核对，正文禁止署名】")
         for item in breaking[:12]:
             news_parts.append(item.get("title", "") if isinstance(item, dict) else str(item))
     if featured:
-        news_parts.append("\n【重点资讯原题｜仅供核对，正文禁止署名】")
+        news_parts.append(f"\n【今日重点原题｜{today_date}｜仅供核对，正文禁止署名】")
         for item in featured[:12]:
             news_parts.append(item.get("title", "") if isinstance(item, dict) else str(item))
     if aa_titles:
-        news_parts.append("\n【AA重要资讯原题｜TOP STORIES，仅供核对，正文禁止署名】")
+        news_parts.append(f"\n【AA今日重要资讯｜{today_date}｜TOP STORIES，仅供核对，正文禁止署名】")
         for t in aa_titles[:8]:
             news_parts.append(t)
     if not breaking and not featured and not aa_titles:

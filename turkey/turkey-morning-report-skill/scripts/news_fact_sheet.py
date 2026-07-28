@@ -107,8 +107,8 @@ _CN_MAP = [
         "胡塞武装袭击沙特石油设施，地缘溢价再度升温。",
     ),
     (
-        re.compile(r"NASDAQ 100", re.I),
-        "纳斯达克100下跌并创下近阶段新低，外围风险偏好承压。",
+        re.compile(r"NASDAQ\s*(?:100|VADELİ)", re.I),
+        "纳斯达克期货/指数走弱，外围风险偏好承压。",
     ),
     (
         re.compile(r"ENFLASYON RAPORU|MALİYETLER HIZLA|ideal.*inflation", re.I),
@@ -143,6 +143,16 @@ _CN_MAP = [
 
 
 def title_to_cn_line(title: str) -> str:
+    # Prefer copying explicit percentages from the source title when present.
+    m = re.search(
+        r"NASDAQ\s*(?:100|VADELİ)[^\n]{0,40}?YÜZDE\s*([\d.,]+)\s*(DÜŞ|ART)",
+        title or "",
+        re.I,
+    )
+    if m:
+        pct = m.group(1).replace(",", ".")
+        direction = "下跌" if m.group(2).upper().startswith("DÜŞ") else "上涨"
+        return f"纳斯达克相关指数/期货{direction}约{pct}%，外围风险偏好承压。"
     for pat, cn in _CN_MAP:
         if pat.search(title):
             return cn
@@ -254,9 +264,11 @@ def build_international_news_card(
         breaking, featured, aa_titles=aa_titles, limit=limit
     )
     lines = [
-        "【国际新闻素材卡｜来源=BHT突发/重点 + AA Morning Briefing TOP STORIES，已综合去重；"
-        "【国际新闻】只能复述下列条目，每条独占一行；禁止编造；正文不要写来源名称】"
+        "【国际新闻素材卡｜仅限今日(TR) BHT突发/重点 + 今日 AA TOP STORIES，已综合去重；"
+        "禁止使用非今日突发/旧稿；【国际新闻】只能复述下列条目，每条独占一行；"
+        "禁止编造涨跌幅等数字（原题没有的数字不得写）；正文不要写来源名称】"
     ]
+
     if not picked:
         lines.append("（暂无可用国际/宏观突发标题）")
         return "\n".join(lines)

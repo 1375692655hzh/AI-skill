@@ -6,7 +6,8 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import date
+import time
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
@@ -21,6 +22,112 @@ from bht_closing_fetcher import (
 )
 
 BORSA_URL = f"{BASE}/borsa"
+TR_TZ = timezone(timedelta(hours=3))
+
+
+def article_publish_date(url: str, *, timeout: int = 20) -> Optional[date]:
+    """Parse <time datetime> (or visible TR date) from a BloombergHT article page."""
+    if not url or "/sondakika" in url.rstrip("/").split("/")[-1]:
+        return None
+    try:
+        resp = requests.get(url, timeout=timeout, headers=HEADERS)
+        if resp.status_code != 200:
+            return None
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for node in soup.find_all("time"):
+            raw = (node.get("datetime") or "").strip()
+            if not raw:
+                continue
+            try:
+                dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=TR_TZ)
+                return dt.astimezone(TR_TZ).date()
+            except ValueError:
+                continue
+        text = soup.get_text(" ", strip=True)
+        m = re.search(
+            r"(\d{1,2})\s+(Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)\s+(20\d{2})",
+            text,
+        )
+        if not m:
+            return None
+        months = {
+            "Ocak": 1, "Şubat": 2, "Mart": 3, "Nisan": 4, "Mayıs": 5, "Haziran": 6,
+            "Temmuz": 7, "Ağustos": 8, "Eylül": 9, "Ekim": 10, "Kasım": 11, "Aralık": 12,
+        }
+        return date(int(m.group(3)), months[m.group(2)], int(m.group(1)))
+    except Exception:
+        return None
+
+
+def filter_items_for_today(
+    items: List[Dict[str, str]],
+    today: date,
+    *,
+    undated_policy: str = "drop",
+    resolve_urls: bool = True,
+    delay_seconds: float = 0.4,
+) -> List[Dict[str, str]]:
+    """
+    Keep only headlines published on `today` (Turkey calendar).
+
+    undated_policy:
+      - "drop": discard items without a resolvable date (default for featured)
+      - "assume_today": treat undated live ticker as today (breaking SON DAKİKA)
+    """
+    kept: list[dict[str, str]] = []
+    for idx, item in enumerate(items or []):
+        entry = dict(item)
+        pub: Optional[date] = None
+        raw = entry.get("published_date") or entry.get("date")
+        if raw:
+            try:
+                pub = date.fromisoformat(str(raw)[:10])
+            except ValueError:
+                pub = None
+        if pub is None and resolve_urls:
+            pub = article_publish_date(entry.get("url") or "")
+            if delay_seconds and idx + 1 < len(items):
+                time.sleep(delay_seconds)
+        if pub is None and undated_policy == "assume_today":
+            pub = today
+        if pub != today:
+            title = (entry.get("title") or "")[:60]
+            print(
+                f"Skip non-today headline ({pub}): {title}",
+                file=sys.stderr,
+            )
+            continue
+        entry["published_date"] = pub.isoformat()
+        kept.append(entry)
+    return kept
+
+
+def fetch_today_headlines(today: date) -> Dict[str, List[Dict[str, str]]]:
+    """Fresh SON DAKİKA + Öne Çıkan, filtered to Turkey `today` only."""
+    print(f"Fetching live BHT headlines for today={today.isoformat()}...", file=sys.stderr)
+    breaking_raw = fetch_breaking_news()
+    featured_raw = fetch_featured_news()
+    # Live ticker has no article URL/date → only valid when freshly scraped as "now".
+    breaking = filter_items_for_today(
+        breaking_raw,
+        today,
+        undated_policy="assume_today",
+        resolve_urls=False,
+    )
+    featured = filter_items_for_today(
+        featured_raw,
+        today,
+        undated_policy="drop",
+        resolve_urls=True,
+    )
+    print(
+        f"Today headlines: breaking={len(breaking)}/{len(breaking_raw)}, "
+        f"featured={len(featured)}/{len(featured_raw)}",
+        file=sys.stderr,
+    )
+    return {"breaking_news": breaking, "featured_news": featured}
 
 
 def fetch_breaking_news(url: str = BORSA_URL) -> List[Dict[str, str]]:
