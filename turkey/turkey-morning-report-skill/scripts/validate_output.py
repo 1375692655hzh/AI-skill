@@ -22,10 +22,16 @@ FACT_ANALYSIS_PATTERNS = [
     r"由于",
     r"因为",
     r"导致",
+    r"呈现出[^。]*?格局",
+    r"显示出",
+    r"反映(了|出)",
+    r"受到?.*?(压制|推动|拖累|提振)",
     r"市场认为",
     r"暗示",
     r"预计",
     r"展望",
+    r"结构性轮动",
+    r"系统性撤退",
     r"支撑位",
     r"阻力位",
     r"均线",
@@ -34,7 +40,29 @@ FACT_ANALYSIS_PATTERNS = [
     r"情绪面",
     r"资金面",
     r"技术面",
+    r"权重分化",
+    r"整体承压",
+    r"呈现出",
 ]
+
+# Generic fluff phrases that indicate the model did NOT use concrete BHT data.
+FACT_FLUFF_PATTERNS = [
+    r"权重蓝筹",
+    r"中小盘题材",
+    r"权重股",
+    r"周期与成长板块",
+    r"防御属性",
+    r"成交集中于",
+    r"位居成交额前列",
+    r"前期累计涨幅较大",
+    r"高低(切换|轮动)",
+    r"主要标的",
+    r"等(权重|板块|个股)",
+    r"及相关",
+]
+
+# Required concrete tickers in 关键个股 — at least N uppercase codes (length>=4)
+MIN_TICKERS_IN_STOCKS = 3
 
 
 def _extract_section(text: str, title: str) -> str:
@@ -118,21 +146,47 @@ def validate(text: str) -> dict:
     if "风险提示" not in text and "不构成投资建议" not in text:
         warnings.append("Risk warning or disclaimer missing.")
 
+    # Fact sections: HARD-FAIL on unconverted TL, analysis tone, fluff.
     for title in FACT_SECTIONS:
         body = _extract_section(text, title)
         if not body:
             continue
-        if re.search(r"\d{1,3}(?:\.\d{3}){2,}\s*(?:TL|里拉)", body):
-            warnings.append(f"[{title}] large TL amount looks unconverted; prefer 「亿里拉」.")
+        # 1) Unconverted large TL amount → must use 亿里拉
+        if re.search(r"\d{1,3}(?:[.,]\d{3}){1,}\s*(?:TL|里拉)", body):
+            errors.append(
+                f"[{title}] unconverted large TL amount found; must use 「亿里拉」."
+            )
+        # 2) Analytical / causal language banned in fact sections
         for ap in FACT_ANALYSIS_PATTERNS:
-            if re.search(ap, body):
-                warnings.append(f"[{title}] looks analytical (matched /{ap}/); keep facts only.")
+            m = re.search(ap, body)
+            if m:
+                errors.append(
+                    f"[{title}] analytical language「{m.group(0)}」banned in BHT-only fact section."
+                )
+                break
+        # 3) Generic fluff = no real data
+        for fp in FACT_FLUFF_PATTERNS:
+            m = re.search(fp, body)
+            if m:
+                errors.append(
+                    f"[{title}] generic phrase「{m.group(0)}」— use concrete BHT names/tickers."
+                )
                 break
 
+    # 关键个股 must contain concrete tickers, not just prose
     stocks = _extract_section(text, "关键个股")
-    if stocks and "成交" in stocks and ("涨幅" in stocks or "跌幅" in stocks):
-        if re.search(r"成交[^\n]*涨幅|成交[^\n]*跌幅", stocks):
-            warnings.append("[关键个股] 成交额与涨跌幅应换行分行，不要挤同一行.")
+    if stocks:
+        tickers = re.findall(r"\b[A-Z]{3,}[A-Z0-9.]*\b", stocks)
+        stop = {"BIST", "TL", "TRY", "USD", "EUR", "BRENT", "WTI", "NBA", "GDP", "CPI", "PCE"}
+        tickers = [t for t in tickers if t not in stop]
+        if len(set(tickers)) < MIN_TICKERS_IN_STOCKS:
+            errors.append(
+                f"[关键个股] fewer than {MIN_TICKERS_IN_STOCKS} concrete tickers "
+                f"(found {sorted(set(tickers))}); list real stock codes from BHT."
+            )
+        if "成交" in stocks and ("涨幅" in stocks or "跌幅" in stocks):
+            if re.search(r"成交[^\n]*涨幅|成交[^\n]*跌幅", stocks):
+                errors.append("[关键个股] 成交额与涨跌幅应换行分行，不要挤同一行.")
 
     intl = _extract_section(text, "国际新闻")
     if intl:

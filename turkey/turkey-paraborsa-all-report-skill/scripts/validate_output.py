@@ -6,6 +6,32 @@ from __future__ import annotations
 import re
 
 
+def _extract_summary_macro(text: str) -> str:
+    """Body of the 宏观与市场共识 narrative paragraph (before 个股覆盖汇总)."""
+    m = re.search(
+        r"宏观与市场共识\s*(.*?)(?=\n个股覆盖汇总|\n\| 标的|\n券商观点速览|\n【|$)",
+        text,
+        re.S,
+    )
+    return (m.group(1) if m else "").strip()
+
+
+# Fluff patterns that indicate the macro narrative is padding, not synthesis.
+MACRO_FLUFF_PATTERNS = [
+    r"呈现出[^。]*?格局",
+    r"权重分化",
+    r"整体承压",
+    r"高低(切换|轮动)",
+    r"结构性轮动",
+    r"系统性撤退",
+    r"主要标的",
+    r"权重蓝筹",
+    r"中小盘题材",
+    r"周期与成长板块",
+    r"防御属性",
+]
+
+
 def validate_summary(text: str) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
@@ -37,6 +63,35 @@ def validate_summary(text: str) -> dict:
                 "技术位共识/宏观与事件/资金与标的 only."
             )
 
+    # Ticker table: reject single-broker wall (each row should ideally cite ≥2 brokers;
+    # a table dominated by single-broker rows means no real cross-broker synthesis).
+    if "| 标的 |" in text or "个股覆盖汇总" in text:
+        rows = re.findall(r"\|\s*([A-Z]{3,}[A-Z0-9.]*)\s*\|\s*([^|]+)\|", text)
+        if rows:
+            single_broker_rows = 0
+            for _ticker, brokers_cell in rows:
+                # Count broker mentions by comma /、/and separators
+                parts = re.split(r"[,，、/]|和|and", brokers_cell)
+                parts = [p.strip() for p in parts if p.strip()]
+                if len(parts) <= 1:
+                    single_broker_rows += 1
+            if len(rows) >= 6 and single_broker_rows / len(rows) > 0.6:
+                errors.append(
+                    f"[个股覆盖汇总] {single_broker_rows}/{len(rows)} rows cite only one broker; "
+                    "prefer tickers mentioned by ≥2 brokers."
+                )
+
+    # 宏观与市场共识 narrative must not be padding fluff
+    macro = _extract_summary_macro(text)
+    if macro:
+        for fp in MACRO_FLUFF_PATTERNS:
+            m = re.search(fp, macro)
+            if m:
+                errors.append(
+                    f"[宏观与市场共识] generic phrase「{m.group(0)}」— synthesize concrete levels/events."
+                )
+                break
+
     if "分歧点" not in text:
         warnings.append("Summary may be missing 分歧点.")
 
@@ -49,9 +104,10 @@ def validate_report(text: str, *, min_articles: int = 1) -> dict:
 
     if len(text) < 500:
         errors.append("Output too short (< 500 chars).")
-    if "【综合总结】" not in text:
+    # Section headers carry a date suffix, e.g. 【综合总结 — 2026-07-27（周一）】
+    if not re.search(r"【综合总结[^】]*】", text):
         errors.append("Missing section: 【综合总结】")
-    if "【拼接内容】" not in text:
+    if not re.search(r"【拼接内容[^】]*】", text):
         errors.append("Missing section: 【拼接内容】")
     if "个股覆盖汇总" not in text and "标的" not in text:
         warnings.append("Summary may be missing ticker coverage table.")
