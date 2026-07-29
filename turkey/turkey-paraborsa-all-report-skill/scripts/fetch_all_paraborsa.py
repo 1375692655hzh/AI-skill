@@ -3,6 +3,7 @@
 """Fetch full article bodies for discovered Paraborsa posts."""
 from __future__ import annotations
 
+import faulthandler
 import json
 import re
 import sys
@@ -16,11 +17,19 @@ from bs4 import BeautifulSoup
 
 from scan_paraborsa import scan_all
 
+# Enable faulthandler so hard crashes (segfault from native parsers like lxml,
+# C-extension bugs, deadlocks) leave a traceback instead of a bare Exit 1.
+faulthandler.enable()
+
 BASE = "https://www.paraborsa.net"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Accept": "application/json",
 }
+
+# Status codes that typically indicate transient Cloudflare / origin flaps and
+# should be retried rather than treated as permanent per-slug failures.
+_TRANSIENT_STATUS = {429, 500, 502, 503, 504}
 
 
 def strip_html(text: str) -> str:
@@ -28,7 +37,10 @@ def strip_html(text: str) -> str:
 
 
 def html_to_text(html: str) -> str:
-    soup = BeautifulSoup(html or "", "lxml")
+    # Use the stdlib parser. On some Windows/env combinations lxml's native
+    # binding segfaults on Paraborsa HTML, killing the process with no traceback.
+    # html.parser is slower but rock-solid and dependency-free.
+    soup = BeautifulSoup(html or "", "html.parser")
     for tag in soup(["script", "style", "nav", "footer"]):
         tag.decompose()
     return "\n".join(line for line in soup.get_text("\n", strip=True).splitlines() if line.strip())
@@ -44,24 +56,39 @@ def fetch_post_by_slug(
     for attempt in range(retries):
         try:
             resp = requests.get(url, headers=HEADERS, timeout=25)
-            if resp.status_code == 429:
-                time.sleep(base_delay * (attempt + 1) * 2)
-                continue
-            if resp.status_code != 200:
-                return None, f"status_{resp.status_code}"
-            data = resp.json()
-            if not data:
-                return None, "not_found"
-            post = data[0]
-            rendered = post.get("content", {}).get("rendered", "")
-            text = html_to_text(rendered)
-            if len(text) < 80:
-                return None, "content_too_short"
-            return text, "ok"
         except requests.RequestException as exc:
             if attempt + 1 >= retries:
                 return None, f"network_error:{exc}"
             time.sleep(base_delay * (attempt + 1))
+            continue
+        # Retry transient Cloudflare / origin failures instead of giving up.
+        if resp.status_code in _TRANSIENT_STATUS:
+            if attempt + 1 < retries:
+                time.sleep(base_delay * (attempt + 1) * 2)
+                continue
+            return None, f"status_{resp.status_code}"
+        if resp.status_code != 200:
+            return None, f"status_{resp.status_code}"
+        # Parse JSON defensively: some 200 responses return an HTML error page
+        # or empty body, which would raise JSONDecodeError ("Expecting value").
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            preview = re.sub(r"\s+", " ", resp.text or "")[:200]
+            print(
+                f"Warning: Paraborsa API bad JSON for {slug}: "
+                f"{type(exc).__name__}: {exc}; body[:200]={preview!r}",
+                file=sys.stderr,
+            )
+            return None, f"bad_json:{exc}"
+        if not data:
+            return None, "not_found"
+        post = data[0]
+        rendered = post.get("content", {}).get("rendered", "")
+        text = html_to_text(rendered)
+        if len(text) < 80:
+            return None, "content_too_short"
+        return text, "ok"
     return None, "failed"
 
 

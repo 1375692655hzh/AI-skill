@@ -22,7 +22,7 @@ export MINIMAX_API_KEY="your-key"    # PowerShell: $env:MINIMAX_API_KEY="your-ke
 python scripts/generate_info_daily_report.py --config config.json
 ```
 
-输出：`output/{date}_info_daily_report_zh.txt`
+输出：`output/{date}_info_daily_report_zh.md`
 
 ## 推荐执行时间
 

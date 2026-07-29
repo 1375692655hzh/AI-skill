@@ -21,6 +21,21 @@ from runtime_utils import configure_stdio, resolve_paths
 from validate_output import validate
 
 
+def _safe_unlink(path: Path) -> None:
+    """Delete a cache file, tolerating sandbox safe-delete failures.
+
+    Some WorkBuddy sandboxes wrap file deletion in a safe-delete shim that can
+    fail closed (e.g. Windows recycle-bin unavailable). A failed cache eviction
+    must NOT abort report generation — worst case is stale cache reuse, which
+    the date-mismatch guard above already catches.
+    """
+    try:
+        if path.exists():
+            path.unlink()
+    except (OSError, PermissionError) as exc:
+        print(f"Warning: could not evict cache file {path.name}: {exc}", file=sys.stderr)
+
+
 WEEKDAYS_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
@@ -68,8 +83,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     if content and not is_content_for_date(target_date, content, "info_yatirim"):
         print(f"Warning: bulletin date mismatch, discarding cache for {target_date}")
         cache_file = cache_dir / f"info_technical_{target_date.isoformat()}.json"
-        if cache_file.exists():
-            cache_file.unlink()
+        _safe_unlink(cache_file)
         bulletin = fetch_info_technical(
             target_date,
             cache_dir,
@@ -115,7 +129,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     if result.get("warnings"):
         print(f"Validation warnings: {result['warnings']}")
 
-    output_file = output_dir / f"{target_date.isoformat()}_info_technical_report_zh.txt"
+    output_file = output_dir / f"{target_date.isoformat()}_info_technical_report_zh.md"
     output_file.write_text(report_content, encoding="utf-8")
     print(f"Info technical report written to: {output_file}")
     return output_file

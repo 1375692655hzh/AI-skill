@@ -22,8 +22,8 @@
   "brief": {
     "enabled": true,
     "template_path": "templates/close_report_brief_template.txt",
-    "min_chars": 400,
-    "max_chars": 500,
+    "min_chars": 200,
+    "max_chars": 600,
     "max_tokens": 2000,
     "temperature": 0.3
   }

@@ -63,7 +63,7 @@ python scripts/generate_info_technical_report.py --config config.json --force-da
 python scripts/generate_info_technical_report.py --config config.json --no-llm
 ```
 
-输出：`output/{日期}_info_technical_report_zh.txt`
+输出：`output/{日期}_info_technical_report_zh.md`
 
 ---
 

@@ -155,7 +155,7 @@ def generate(
         except Exception as exc:
             print(f"Translation failed, keeping English: {exc}", file=sys.stderr)
 
-    out_name = config.get("output_filename", "{date}_aa_morning_briefing_zh.txt")
+    out_name = config.get("output_filename", "{date}_aa_morning_briefing_zh.md")
     out_file = output_dir / out_name.format(date=target_date.isoformat())
     out_file.write_text(output_text, encoding="utf-8")
 

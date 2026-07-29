@@ -39,8 +39,8 @@ The skill is self-contained. A separate Turkey-investment project is **optional*
 
 ## Outputs
 
-- **完整版**：`{output_dir}/{today_date}_daily_briefing_zh.txt`（800–1200 字）
-- **简报版**：`{output_dir}/{today_date}_daily_briefing_brief_zh.txt`（200–520 字，【字段】结构化，个股每只一行）
+- **完整版**：`{output_dir}/{today_date}_daily_briefing_zh.md`（800–1200 字）
+- **简报版**：`{output_dir}/{today_date}_daily_briefing_brief_zh.md`（200–520 字，【字段】结构化，个股每只一行）
 - Default output directory is `output/` (relative to skill directory).
 - No WhatsApp, email, or other delivery is performed.
 
@@ -221,7 +221,7 @@ See `SETUP.md` for full deployment instructions across Cursor, Codex, Hermes, Op
 
 - [ ] `config.json` points to a valid working directory and output directory.
 - [ ] LLM environment variables are exported.
-- [ ] Running the skill produces `{output_dir}/{today_date}_daily_briefing_zh.txt` and `{output_dir}/{today_date}_daily_briefing_brief_zh.txt`.
+- [ ] Running the skill produces `{output_dir}/{today_date}_daily_briefing_zh.md` and `{output_dir}/{today_date}_daily_briefing_brief_zh.md`.
 - [ ] The output contains all 6 sections and the risk warning.
 - [ ] The output has no tables, emojis, bullets, or Markdown separators.
 - [ ] The target date logic is correct for Monday/holiday scenarios.

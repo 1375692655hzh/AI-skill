@@ -83,8 +83,8 @@ def main() -> int:
         print(f"Today {today_date} is a holiday or weekend. No briefing generated.", file=sys.stderr)
         return 0
 
-    output_file = output_dir / f"{today_date}_daily_briefing_zh.txt"
-    brief_file = output_dir / f"{today_date}_daily_briefing_brief_zh.txt"
+    output_file = output_dir / f"{today_date}_daily_briefing_zh.md"
+    brief_file = output_dir / f"{today_date}_daily_briefing_brief_zh.md"
 
     closing_cfg = config.get("sources", {}).get("bloomberght_closing", {})
     closing = fetch_closing_review(

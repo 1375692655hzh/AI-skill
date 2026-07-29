@@ -77,7 +77,7 @@ python scripts/generate_info_daily_report.py --config config.json --force-date 2
 python scripts/generate_info_daily_report.py --config config.json --no-llm
 ```
 
-输出：`output/{日期}_info_daily_report_zh.txt`
+输出：`output/{日期}_info_daily_report_zh.md`
 
 ---
 

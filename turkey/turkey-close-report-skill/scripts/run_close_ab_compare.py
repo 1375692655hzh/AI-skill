@@ -192,13 +192,13 @@ def main() -> None:
         "A",
         prompt_a,
         llm_cfg,
-        f"{TARGET.isoformat()}_close_report_A_bht_only_zh.txt",
+        f"{TARGET.isoformat()}_close_report_A_bht_only_zh.md",
     )
     run_one(
         "B",
         prompt_b,
         llm_cfg,
-        f"{TARGET.isoformat()}_close_report_B_bht_tech_zh.txt",
+        f"{TARGET.isoformat()}_close_report_B_bht_tech_zh.md",
     )
     print("DONE")
 

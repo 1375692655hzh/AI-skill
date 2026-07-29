@@ -89,7 +89,7 @@ Fetch modes:
 
 ## Outputs
 
-- `{output_dir}/{date}_info_technical_report_zh.txt` — 表格为主的中文技术报告
+- `{output_dir}/{date}_info_technical_report_zh.md` — 表格为主的中文技术报告
 
 Default output directory: `output/`
 

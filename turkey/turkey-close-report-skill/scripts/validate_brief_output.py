@@ -47,8 +47,8 @@ def _validate_stock_section(text: str, errors: list[str]) -> None:
 def validate_brief(
     text: str,
     *,
-    min_chars: int = 400,
-    max_chars: int = 500,
+    min_chars: int = 200,
+    max_chars: int = 600,
 ) -> dict:
     errors: list[str] = []
     warnings: list[str] = []

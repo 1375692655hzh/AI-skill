@@ -78,7 +78,7 @@ def _run_project_cli(workdir: Path, kind: str, target_date: date) -> dict:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=120,
+            timeout=180,
             env=env,
         )
     except Exception as exc:

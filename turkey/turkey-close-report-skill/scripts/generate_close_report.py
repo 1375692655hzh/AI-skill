@@ -30,6 +30,21 @@ from bht_fact_sheet import format_bloomberght_for_prompt, build_bht_fact_sheet
 WEEKDAYS_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
+def _safe_unlink(path: Path) -> None:
+    """Delete a cache file, tolerating sandbox safe-delete failures.
+
+    Some WorkBuddy sandboxes wrap file deletion in a safe-delete shim that can
+    fail closed (e.g. Windows recycle-bin unavailable). A failed cache eviction
+    must NOT abort report generation — the worst case is stale cache reuse,
+    which is caught by the date-mismatch guard above. So swallow OSError here.
+    """
+    try:
+        if path.exists():
+            path.unlink()
+    except (OSError, PermissionError) as exc:
+        print(f"Warning: could not evict cache file {path.name}: {exc}", file=sys.stderr)
+
+
 def load_config(config_path: Path) -> dict:
     return json.loads(config_path.read_text(encoding="utf-8"))
 
@@ -115,9 +130,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
             f"bloomberght_close_{target_date.isoformat()}.json",
             f"bloomberght_closing_{target_date.isoformat()}.json",
         ):
-            cf = cache_dir / fname
-            if cf.exists():
-                cf.unlink()
+            _safe_unlink(cache_dir / fname)
         bloomberght = fetch_close_review(
             target_date,
             cache_dir,
@@ -135,8 +148,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     ):
         print(f"Warning: commentary date mismatch, discarding cache for {target_date}")
         cache_file = cache_dir / f"paraborsa_{target_date.isoformat()}.json"
-        if cache_file.exists():
-            cache_file.unlink()
+        _safe_unlink(cache_file)
         paraborsa = fetch_paraborsa(target_date, cache_dir)
 
     info_yatirim = fetch_info_yatirim(target_date, cache_dir)
@@ -144,8 +156,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     if daily_content and not is_content_for_date(target_date, daily_content, "info_yatirim"):
         print(f"Warning: bulletin date mismatch, discarding cache for {target_date}")
         cache_file = cache_dir / f"info_yatirim_{target_date.isoformat()}.json"
-        if cache_file.exists():
-            cache_file.unlink()
+        _safe_unlink(cache_file)
         info_yatirim = fetch_info_yatirim(target_date, cache_dir)
 
     weekday_cn = WEEKDAYS_CN[target_date.weekday()]
@@ -193,7 +204,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     # 只要换行、不要空行：折叠多余空行
     content = re.sub(r"\n{2,}", "\n", content.replace("\r\n", "\n")).strip() + "\n"
 
-    output_file = output_dir / f"{target_date.isoformat()}_close_report_zh.txt"
+    output_file = output_dir / f"{target_date.isoformat()}_close_report_zh.md"
     output_file.write_text(content, encoding="utf-8")
     print(f"Close report written to: {output_file}")
 
@@ -216,11 +227,11 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
             brief_llm_cfg,
             lambda text: validate_brief(
                 text,
-                min_chars=brief_cfg.get("min_chars", 400),
-                max_chars=brief_cfg.get("max_chars", 500),
+        min_chars=brief_cfg.get("min_chars", 200),
+        max_chars=brief_cfg.get("max_chars", 600),
             ),
         )
-        brief_file = output_dir / f"{target_date.isoformat()}_close_report_brief_zh.txt"
+        brief_file = output_dir / f"{target_date.isoformat()}_close_report_brief_zh.md"
         if brief_output and brief_result.get("ok"):
             brief_file.write_text(brief_output, encoding="utf-8")
             print(f"Brief close report written to: {brief_file}")

@@ -61,8 +61,8 @@ BIST 开盘 TR 10:00 = 北京 **15:00**。
 
 | 文件 | 说明 |
 |------|------|
-| `output/{date}_x_influencer_full_zh.txt` | 全量原文 + 译文 |
-| `output/{date}_x_influencer_curated_zh.txt` | 精选热点 + 背景 + 投资分析 |
+| `output/{date}_x_influencer_full_zh.md` | 全量原文 + 译文 |
+| `output/{date}_x_influencer_curated_zh.md` | 精选热点 + 背景 + 投资分析 |
 | `.cache/.../posts_{date}.json` | 抓取缓存 |
 
 ## Run Flow

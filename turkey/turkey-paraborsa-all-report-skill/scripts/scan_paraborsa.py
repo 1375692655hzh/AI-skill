@@ -3,7 +3,9 @@
 """Discover all Paraborsa commentary posts for a target date."""
 from __future__ import annotations
 
+import json
 import re
+import sys
 import time
 from datetime import date
 from typing import Iterable
@@ -101,7 +103,16 @@ def wp_search(target: date, *, delay: float = 0.8) -> dict[str, dict]:
             )
             if resp.status_code != 200:
                 continue
-            for post in resp.json():
+            try:
+                posts_data = resp.json()
+            except (ValueError, json.JSONDecodeError) as exc:
+                preview = re.sub(r"\s+", " ", resp.text or "")[:200]
+                print(
+                    f"Warning: wp_search bad JSON for {q!r}: {exc}; body[:200]={preview!r}",
+                    file=sys.stderr,
+                )
+                continue
+            for post in posts_data:
                 slug = post.get("slug", "")
                 if not slug or slug in found:
                     continue
@@ -139,17 +150,30 @@ def slug_probe(
                     headers=HEADERS,
                     timeout=20,
                 )
-                if resp.status_code == 200 and resp.json():
-                    post = resp.json()[0]
-                    title = strip_html(post.get("title", {}).get("rendered", ""))
-                    found[slug] = {
-                        "slug": slug,
-                        "title": title,
-                        "url": post.get("link", ""),
-                        "article_type": prefix,
-                        "broker_slug": broker,
-                        "discovered_via": "slug_probe",
-                    }
+                if resp.status_code != 200:
+                    continue
+                try:
+                    posts_data = resp.json()
+                except (ValueError, json.JSONDecodeError) as exc:
+                    preview = re.sub(r"\s+", " ", resp.text or "")[:200]
+                    print(
+                        f"Warning: slug_probe bad JSON for {slug}: {exc}; "
+                        f"body[:200]={preview!r}",
+                        file=sys.stderr,
+                    )
+                    continue
+                if not posts_data:
+                    continue
+                post = posts_data[0]
+                title = strip_html(post.get("title", {}).get("rendered", ""))
+                found[slug] = {
+                    "slug": slug,
+                    "title": title,
+                    "url": post.get("link", ""),
+                    "article_type": prefix,
+                    "broker_slug": broker,
+                    "discovered_via": "slug_probe",
+                }
                 time.sleep(delay)
             except requests.RequestException:
                 continue

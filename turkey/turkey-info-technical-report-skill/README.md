@@ -22,7 +22,7 @@ export MINIMAX_API_KEY="your-key"
 python scripts/generate_info_technical_report.py --config config.json
 ```
 
-输出：`output/{date}_info_technical_report_zh.txt`
+输出：`output/{date}_info_technical_report_zh.md`
 
 ## 推荐执行时间
 

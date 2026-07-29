@@ -209,7 +209,7 @@ def generate(
     if validation.get("warnings"):
         print(f"Report warnings: {validation['warnings']}")
 
-    output_file = output_dir / f"{target_date.isoformat()}_paraborsa_all_report_zh.txt"
+    output_file = output_dir / f"{target_date.isoformat()}_paraborsa_all_report_zh.md"
     output_file.write_text(report, encoding="utf-8")
     print(f"Full report written to: {output_file}")
     return output_file

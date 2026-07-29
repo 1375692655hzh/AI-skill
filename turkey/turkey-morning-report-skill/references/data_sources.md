@@ -92,7 +92,7 @@ This skill focuses on `closing` (BloombergHT) as the primary source because the 
 Only one file is produced:
 
 ```
-{output_dir}/{today_date}_daily_briefing_zh.txt
+{output_dir}/{today_date}_daily_briefing_zh.md
 ```
 
 Default output directory: `output/`.

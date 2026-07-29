@@ -136,7 +136,7 @@ def generate(
     if not full_check["ok"]:
         print(f"Full report validation: {full_check['errors']}", file=sys.stderr)
 
-    full_path = output_dir / f"{target_date.isoformat()}_x_influencer_full_zh.txt"
+    full_path = output_dir / f"{target_date.isoformat()}_x_influencer_full_zh.md"
     full_path.write_text(full_text, encoding="utf-8")
     print(f"Full report: {full_path}")
 
@@ -152,7 +152,7 @@ def generate(
                 "窗口内（TR 昨天 00:00→现在）无可用帖子，未生成精选分析。\n\n"
                 "【精选热点】\n无\n\n【背景说明】\n无\n\n【投资分析】\n无\n\n【风险提示】\n无数据。\n"
             )
-            curated_path = output_dir / f"{target_date.isoformat()}_x_influencer_curated_zh.txt"
+            curated_path = output_dir / f"{target_date.isoformat()}_x_influencer_curated_zh.md"
             curated_path.write_text(curated_text, encoding="utf-8")
             print(f"Curated report (empty posts): {curated_path}")
         else:
@@ -182,7 +182,7 @@ def generate(
             else:
                 if not result.get("ok"):
                     print(f"Curated validation warnings/errors: {result}", file=sys.stderr)
-                curated_path = output_dir / f"{target_date.isoformat()}_x_influencer_curated_zh.txt"
+                curated_path = output_dir / f"{target_date.isoformat()}_x_influencer_curated_zh.md"
                 curated_path.write_text(curated_text.strip() + "\n", encoding="utf-8")
                 print(f"Curated report: {curated_path}")
 

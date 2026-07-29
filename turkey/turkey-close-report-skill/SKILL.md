@@ -62,8 +62,8 @@ Every source has a date guard. After fetching, the skill checks whether the fetc
 
 ## Outputs
 
-- **完整版**：`{output_dir}/{date}_close_report_zh.txt`（800–1500 字）
-- **简报版**：`{output_dir}/{date}_close_report_brief_zh.txt`（400–500 字，【字段】结构化，个股每只一行）
+- **完整版**：`{output_dir}/{date}_close_report_zh.md`（800–1500 字）
+- **简报版**：`{output_dir}/{date}_close_report_brief_zh.md`（200–600 字，【字段】结构化，个股每只一行）
 - Default output directory: `output/`
 
 ## Run Flow
@@ -116,7 +116,7 @@ See `config.json`. Key knobs:
 | `llm` | Provider, model, API key env var, base URL |
 | `holidays` | Optional extras only; fixed TR holidays auto-generated (Jun+ includes next year) |
 | `brief.enabled` | Generate structured brief version (default `true`) |
-| `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 400–500) |
+| `brief.min_chars` / `brief.max_chars` | Brief length bounds (default 200–600) |
 
 ## Format Rules
 

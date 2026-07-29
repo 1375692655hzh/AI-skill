@@ -31,5 +31,5 @@ python scripts/generate_x_influencer_report.py --config config.json --force-refr
 
 输出：
 
-- `output/{date}_x_influencer_full_zh.txt`
-- `output/{date}_x_influencer_curated_zh.txt`
+- `output/{date}_x_influencer_full_zh.md`
+- `output/{date}_x_influencer_curated_zh.md`

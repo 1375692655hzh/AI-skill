@@ -5,7 +5,7 @@
   "target_date": "auto",
   "skip_weekend": false,
   "skip_holidays": true,
-  "output_filename": "{date}_aa_morning_briefing_zh.txt",
+  "output_filename": "{date}_aa_morning_briefing_zh.md",
   "sources": {
     "aa_morning_briefing": {
       "search_url": "https://www.aa.com.tr/en/search?s=Morning+Briefing",

@@ -74,8 +74,8 @@ python scripts/generate_briefing.py --config config.json
 
 | 文件 | 说明 |
 |------|------|
-| `{日期}_daily_briefing_zh.txt` | 完整早评（800–1200 字） |
-| `{日期}_daily_briefing_brief_zh.txt` | 结构化简报（汉字+中文标点 200–520 字，个股每只一行） |
+| `{日期}_daily_briefing_zh.md` | 完整早评（800–1200 字） |
+| `{日期}_daily_briefing_brief_zh.md` | 结构化简报（汉字+中文标点 200–520 字，个股每只一行） |
 
 简报版示例格式：
 

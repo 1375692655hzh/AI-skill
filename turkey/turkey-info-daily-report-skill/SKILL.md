@@ -89,7 +89,7 @@ Fetch modes:
 
 ## Outputs
 
-- `{output_dir}/{date}_info_daily_report_zh.txt` — 600–1200 字纯文字报告
+- `{output_dir}/{date}_info_daily_report_zh.md` — 600–1200 字纯文字报告
 
 Default output directory: `output/`
 

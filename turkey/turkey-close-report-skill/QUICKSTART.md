@@ -98,8 +98,8 @@ python scripts/generate_close_report.py --force-date 2026-07-10 --config config.
 文件保存到：
 
 ```
-output/{日期}_close_report_zh.txt          # 完整版
-output/{日期}_close_report_brief_zh.txt    # 简报版
+output/{日期}_close_report_zh.md          # 完整版
+output/{日期}_close_report_brief_zh.md    # 简报版
 ```
 
 首次使用：`cp config.example.json config.json`，详见 `SETUP.md`。

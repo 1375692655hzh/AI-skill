@@ -59,7 +59,7 @@ python scripts/generate_paraborsa_all_report.py --config config.json
 
 | 文件 | 说明 |
 |------|------|
-| `output/{date}_paraborsa_all_report_zh.txt` | 完整报告（总结 + 拼接） |
+| `output/{date}_paraborsa_all_report_zh.md` | 完整报告（总结 + 拼接） |
 | `output/{date}_paraborsa_concat.txt` | 仅拼接内容（便于单独阅读） |
 | `.cache/.../paraborsa_all_{date}.json` | 全量抓取缓存 |
 

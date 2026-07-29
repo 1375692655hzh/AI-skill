@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import os
 import re
+import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -82,15 +84,30 @@ def call_llm(
         "Content-Type": "application/json",
     }
 
-    resp = requests.post(url, json=payload, headers=headers, timeout=120)
-    resp.raise_for_status()
-    data = resp.json()
-
-    if "choices" in data and len(data["choices"]) > 0:
-        message = data["choices"][0].get("message", {})
-        return message.get("content", "")
-
-    raise RuntimeError(f"Unexpected LLM response: {data}")
+    # Retry on transient failures: MiniMax frequently times out at 120s under
+    # load, and 5xx flaps happen. Back off exponentially so a brief API hiccup
+    # doesn't fail the whole report.
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=180)
+            # Retry on server errors; client errors (4xx except 429) are fatal.
+            if resp.status_code >= 500 or resp.status_code == 429:
+                if attempt < 2:
+                    time.sleep(2 ** attempt * 2)
+                    continue
+                raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
+            resp.raise_for_status()
+            data = resp.json()
+            if "choices" in data and len(data["choices"]) > 0:
+                message = data["choices"][0].get("message", {})
+                return message.get("content", "")
+            raise RuntimeError(f"Unexpected LLM response: {data}")
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            if attempt < 2:
+                time.sleep(2 ** attempt * 2)
+                continue
+            raise
+    raise RuntimeError("LLM call exhausted retries without response.")
 
 
 if __name__ == "__main__":

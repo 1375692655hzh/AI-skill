@@ -12,11 +12,37 @@ from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 LANDING_URL = "https://infoyatirim.com/arastirma/gunluk-bulten"
 FALLBACK_URL = LANDING_URL
+
+# Shared session with retry/backoff. Info Yatirim's TLS stack frequently emits
+# SSL EOF / 5xx under load; without retries the whole skill gen_fails.
+_SESSION = requests.Session()
+_RETRY = Retry(
+    total=4,
+    backoff_factor=1.5,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET", "HEAD"}),
+    raise_on_status=False,
+)
+_SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
+_SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
+_SESSION.headers.update(HEADERS)
+
+
+def _get(url: str, *, timeout: float = 40.0) -> Optional[requests.Response]:
+    """GET with retry/backoff and SSL tolerance. Returns None on hard failure."""
+    try:
+        resp = _SESSION.get(url, timeout=timeout)
+        return resp
+    except (requests.RequestException, OSError) as exc:
+        print(f"Warning: Info Yatirim GET failed for {url}: {exc}", file=sys.stderr)
+        return None
 
 
 def _slug_for_date(d: date) -> str:
@@ -27,14 +53,12 @@ def _find_archive_link(target_date: date) -> Optional[str]:
     needle = f"gunluk-bulten-{_slug_for_date(target_date)}"
     for page in range(1, 4):
         url = f"{LANDING_URL}?page={page}" if page > 1 else LANDING_URL
-        try:
-            resp = requests.get(url, headers=HEADERS, timeout=20)
-            resp.encoding = "utf-8"
-        except Exception as exc:
-            print(f"Warning: Info Yatirim archive page failed: {exc}", file=sys.stderr)
+        resp = _get(url)
+        if resp is None:
             return None
+        resp.encoding = "utf-8"
 
-        soup = BeautifulSoup(resp.text, "lxml")
+        soup = BeautifulSoup(resp.text, "html.parser")
         for a in soup.find_all("a", href=True):
             href = a.get("href", "")
             if needle in href:
@@ -46,28 +70,24 @@ def _find_bulletin_uuid(target_date: date) -> tuple[Optional[str], Optional[str]
     archive_url = _find_archive_link(target_date)
     archive_label = None
     if archive_url:
-        try:
-            resp = requests.get(archive_url, headers=HEADERS, timeout=20)
+        resp = _get(archive_url)
+        if resp is not None:
             resp.encoding = "utf-8"
             archive_label = resp.text
             for m in re.finditer(r"/Content/Bulletin/([0-9a-fA-F-]{36})\.html", resp.text):
                 return m.group(1), archive_label
-        except Exception as exc:
-            print(f"Warning: Info Yatirim archive content failed: {exc}", file=sys.stderr)
 
-    try:
-        resp = requests.get(LANDING_URL, headers=HEADERS, timeout=20)
-        resp.encoding = "utf-8"
-        archive_label = resp.text
-    except Exception as exc:
-        print(f"Warning: Info Yatirim landing page failed: {exc}", file=sys.stderr)
+    resp = _get(LANDING_URL)
+    if resp is None:
         return None, None
+    resp.encoding = "utf-8"
+    archive_label = resp.text
 
     for m in re.finditer(r"/Content/Bulletin/([0-9a-fA-F-]{36})\.html", resp.text):
         return m.group(1), archive_label
 
     try:
-        soup = BeautifulSoup(resp.text, "lxml")
+        soup = BeautifulSoup(resp.text, "html.parser")
         for script in soup.find_all("script"):
             text = script.get_text() or script.string or ""
             for m in re.finditer(r"/Content/Bulletin/([0-9a-fA-F-]{36})\.html", text):
@@ -79,27 +99,25 @@ def _find_bulletin_uuid(target_date: date) -> tuple[Optional[str], Optional[str]
 
 def fetch_bulletin_content(uuid: str, archive_label: Optional[str] = None) -> str:
     url = f"https://cdn.infoyatirim.com/Content/Bulletin/{uuid}.html"
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=20)
-        resp.encoding = "utf-8"
-        soup = BeautifulSoup(resp.text, "lxml")
-        for s in soup(["script", "style", "nav", "footer"]):
-            s.decompose()
-        body = soup.get_text("\n", strip=True)
-        label = ""
-        if archive_label:
-            m = re.search(
-                r"(\d{1,2}\s+[a-zA-ZğüşöçıİĞÜŞÖÇ]+\s+\d{4})\s+Günlük Bülteni",
-                archive_label,
-                re.I,
-            )
-            if m:
-                label = m.group(0)
-        text = f"{label}\n{body}" if label else body
-        return "\n".join(line for line in text.splitlines() if line.strip())
-    except Exception as exc:
-        print(f"Warning: Info Yatirim bulletin content failed: {exc}", file=sys.stderr)
-    return ""
+    resp = _get(url)
+    if resp is None:
+        return ""
+    resp.encoding = "utf-8"
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for s in soup(["script", "style", "nav", "footer"]):
+        s.decompose()
+    body = soup.get_text("\n", strip=True)
+    label = ""
+    if archive_label:
+        m = re.search(
+            r"(\d{1,2}\s+[a-zA-ZğüşöçıİĞÜŞÖÇ]+\s+\d{4})\s+Günlük Bülteni",
+            archive_label,
+            re.I,
+        )
+        if m:
+            label = m.group(0)
+    text = f"{label}\n{body}" if label else body
+    return "\n".join(line for line in text.splitlines() if line.strip())
 
 
 def fetch_info_daily(

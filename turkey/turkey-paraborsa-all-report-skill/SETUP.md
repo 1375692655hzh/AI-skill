@@ -48,7 +48,7 @@ python scripts/generate_paraborsa_all_report.py --config config.json --force-ref
 
 | 路径 | 内容 |
 |------|------|
-| `output/{date}_paraborsa_all_report_zh.txt` | 完整报告 |
+| `output/{date}_paraborsa_all_report_zh.md` | 完整报告 |
 | `output/{date}_paraborsa_concat.txt` | 仅拼接部分 |
 | `.cache/turkey-paraborsa-all-report/paraborsa_all_{date}.json` | 抓取缓存 |
 

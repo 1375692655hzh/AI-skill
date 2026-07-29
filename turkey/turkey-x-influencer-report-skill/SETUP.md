@@ -91,8 +91,8 @@ python scripts/generate_x_influencer_report.py --config config.json --no-transla
 
 | 路径 | 内容 |
 |------|------|
-| `output/{date}_x_influencer_full_zh.txt` | 原文 + 译文（含媒体链接） |
-| `output/{date}_x_influencer_curated_zh.txt` | 精选分析 |
+| `output/{date}_x_influencer_full_zh.md` | 原文 + 译文（含媒体链接） |
+| `output/{date}_x_influencer_curated_zh.md` | 精选分析 |
 | `.cache/turkey-x-influencer-report/posts_{date}.json` | 缓存 |
 
 ---
