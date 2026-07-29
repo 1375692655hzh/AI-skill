@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import List, Tuple
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 from bht_closing_fetcher import (
     BASE,
     HEADERS,
+    _SESSION,
     fetch_closing_review as _fetch_closing_review,
 )
 
@@ -26,7 +26,7 @@ BORSA_URL = f"{BASE}/borsa"
 def fetch_main_page() -> Tuple[List[str], List[str]]:
     """Fetch breaking and featured headlines from /borsa."""
     try:
-        resp = requests.get(BORSA_URL, headers=HEADERS, timeout=20)
+        resp = _SESSION.get(BORSA_URL, timeout=40)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
     except Exception as exc:

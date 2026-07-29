@@ -12,9 +12,36 @@ from typing import List, Optional
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+# Shared session with retry/backoff. Paraborsa sits behind Cloudflare and
+# intermittently emits 5xx / drops TLS; without retries the close report
+# silently falls back to "no commentary found".
+_SESSION = requests.Session()
+_RETRY = Retry(
+    total=4,
+    backoff_factor=1.5,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET", "HEAD"}),
+    raise_on_status=False,
+)
+_SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
+_SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
+_SESSION.headers.update(HEADERS)
+
+
+def _get(url: str, *, timeout: float = 40.0) -> Optional[requests.Response]:
+    """GET with retry/backoff and SSL tolerance. Returns None on hard failure."""
+    try:
+        return _SESSION.get(url, timeout=timeout)
+    except (requests.RequestException, OSError) as exc:
+        print(f"Warning: Paraborsa GET failed for {url}: {exc}", file=sys.stderr)
+        return None
+
 
 # Priority order for broker commentary (lowercase slugs)
 PRIORITY_BROKERS = ["destek-yatirim", "bizim-yatirim", "bulls", "info-yatirim", "integral-yatirim"]
@@ -38,30 +65,35 @@ def fetch_api_post(broker_slug: str, target_date: date) -> Optional[dict]:
     date_slug = slugify_date(target_date)
     slug = f"borsa-yorumu-{broker_slug}-{date_slug}"
     url = f"https://www.paraborsa.net/wp-json/wp/v2/posts?slug={slug}"
+    resp = _get(url)
+    if resp is None:
+        return None
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=20)
         data = resp.json()
-        if data:
-            post = data[0]
-            return {
-                "title": post.get("title", {}).get("rendered", ""),
-                "url": post.get("link", ""),
-                "content": BeautifulSoup(post.get("content", {}).get("rendered", ""), "lxml").get_text("\n", strip=True),
-            }
-    except Exception as exc:
-        print(f"Warning: Paraborsa API failed for {broker_slug}: {exc}", file=sys.stderr)
+    except (ValueError, json.JSONDecodeError) as exc:
+        preview = re.sub(r"\s+", " ", resp.text or "")[:200]
+        print(
+            f"Warning: Paraborsa API bad JSON for {broker_slug}: {exc}; body[:200]={preview!r}",
+            file=sys.stderr,
+        )
+        return None
+    if data:
+        post = data[0]
+        return {
+            "title": post.get("title", {}).get("rendered", ""),
+            "url": post.get("link", ""),
+            "content": BeautifulSoup(post.get("content", {}).get("rendered", ""), "html.parser").get_text("\n", strip=True),
+        }
     return None
 
 
 def fetch_homepage_links(target_date: date) -> List[dict]:
     """Fetch today's broker commentary links from homepage."""
-    try:
-        resp = requests.get("https://www.paraborsa.net/", headers=HEADERS, timeout=20)
-        resp.encoding = "utf-8"
-        soup = BeautifulSoup(resp.text, "lxml")
-    except Exception as exc:
-        print(f"Warning: Paraborsa homepage failed: {exc}", file=sys.stderr)
+    resp = _get("https://www.paraborsa.net/")
+    if resp is None:
         return []
+    resp.encoding = "utf-8"
+    soup = BeautifulSoup(resp.text, "html.parser")
 
     results = []
     for a in soup.find_all("a", href=True):
@@ -85,10 +117,12 @@ def fetch_homepage_links(target_date: date) -> List[dict]:
 
 
 def extract_article_content(url: str) -> str:
+    resp = _get(url)
+    if resp is None:
+        return ""
+    resp.encoding = "utf-8"
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=20)
-        resp.encoding = "utf-8"
-        soup = BeautifulSoup(resp.text, "lxml")
+        soup = BeautifulSoup(resp.text, "html.parser")
         content = soup.find("article") or soup.find("div", class_=re.compile("content|entry")) or soup.find("main")
         if content:
             for s in content(["script", "style", "nav", "footer"]):

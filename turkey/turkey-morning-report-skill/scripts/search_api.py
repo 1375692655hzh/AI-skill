@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from typing import Optional
 
 import requests
@@ -62,9 +63,25 @@ class SearchAPI:
         }
         if self.provider == "minimax" and self.disable_thinking:
             payload["thinking"] = {"type": "disabled"}
-        resp = requests.post(url, json=payload, headers=headers, timeout=120)
-        resp.raise_for_status()
-        return resp.json()
+        # Web-search-augmented LLM calls are slow (up to 2min) and the upstream
+        # can flap. Retry on transient errors so a single hiccup doesn't drop
+        # international news from the morning report.
+        for attempt in range(3):
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=180)
+                if resp.status_code >= 500 or resp.status_code == 429:
+                    if attempt < 2:
+                        time.sleep(2 ** attempt * 2)
+                        continue
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
+                resp.raise_for_status()
+                return resp.json()
+            except (requests.Timeout, requests.ConnectionError):
+                if attempt < 2:
+                    time.sleep(2 ** attempt * 2)
+                    continue
+                raise
+        raise RuntimeError("search _post exhausted retries")
 
     def _web_search_tool(self) -> dict:
         return {

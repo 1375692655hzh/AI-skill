@@ -10,9 +10,24 @@ from pathlib import Path
 from typing import Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 PIYASALAR_URL = "https://www.bloomberght.com/piyasalar"
 TR_TZ = timezone(timedelta(hours=3))
+
+# BHT is behind Cloudflare; a single TLS/5xx flap would silently drop live
+# quotes from the morning report. Retry transparently.
+_SESSION = requests.Session()
+_RETRY = Retry(
+    total=3,
+    backoff_factor=1.5,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET", "HEAD"}),
+    raise_on_status=False,
+)
+_SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
+_SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
 
 _QUOTE_RE = re.compile(
     r">(USD/TRY|EUR/TRY|ALTIN/ONS|GRAM ALTIN|BRENT)[^<]*</span>\s*"
@@ -146,10 +161,10 @@ def fetch_live_quotes(
 
     now_tr = datetime.now(TR_TZ).isoformat()
     try:
-        resp = requests.get(
+        resp = _SESSION.get(
             url,
             headers={"User-Agent": "Mozilla/5.0 (compatible; turkey-morning-report/1.0)"},
-            timeout=30,
+            timeout=40,
         )
         resp.raise_for_status()
         quotes = parse_piyasalar_html(resp.text)

@@ -16,6 +16,8 @@ import warnings
 
 import feedparser
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 from reorder_sections import reorder_news_in_brief_last
@@ -65,6 +67,18 @@ def title_for_date(d: date) -> str:
 def _session() -> requests.Session:
     s = requests.Session()
     s.headers.update(HEADERS)
+    # AA is the highest-failure task (66.7%); add retry/backoff so a single
+    # transient 5xx / TLS flap doesn't gen_fail the whole briefing.
+    retry = Retry(
+        total=4,
+        backoff_factor=1.5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET", "HEAD"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
     return s
 
 
@@ -115,7 +129,7 @@ def _extract_links_from_html(html: str) -> list[str]:
     for m in re.finditer(r"(morning-briefing-[a-z]+-\d{1,2}-\d{4}/\d+)", html, re.I):
         links.extend(_urls_from_slug_id(m.group(1)))
 
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if "morning-briefing-" in href.lower():
@@ -330,7 +344,7 @@ def _parse_meta_times(html: str, soup: BeautifulSoup) -> dict:
 
 def _extract_body_html_from_scripts(html: str) -> str:
     """AA Next.js pages embed article HTML in script payloads with \\u003c escapes."""
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
     best = ""
     for script in soup.find_all("script"):
         raw = script.string or script.get_text() or ""
@@ -361,7 +375,7 @@ def _html_to_text(body_html: str) -> str:
     cleaned = _unescape_js_string(body_html)
     # Drop trailing empty/noise tags leftovers
     cleaned = re.sub(r'"\]\)\s*$', "", cleaned)
-    soup = BeautifulSoup(cleaned, "lxml")
+    soup = BeautifulSoup(cleaned, "html.parser")
     for tag in soup(["script", "style"]):
         tag.decompose()
 
@@ -408,7 +422,7 @@ def fetch_article(url: str, session: Optional[requests.Session] = None) -> dict:
     resp.raise_for_status()
     resp.encoding = "utf-8"
     html = resp.text
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
 
     title = ""
     h1 = soup.select_one("h1.category-detail-subtitle, h1")

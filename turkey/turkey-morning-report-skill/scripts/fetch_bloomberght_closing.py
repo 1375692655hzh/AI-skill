@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 from bht_closing_fetcher import (
     BASE,
     HEADERS,
+    _SESSION,
     fetch_closing_review as _fetch_closing_review,
 )
 
@@ -30,7 +30,7 @@ def article_publish_date(url: str, *, timeout: int = 20) -> Optional[date]:
     if not url or "/sondakika" in url.rstrip("/").split("/")[-1]:
         return None
     try:
-        resp = requests.get(url, timeout=timeout, headers=HEADERS)
+        resp = _SESSION.get(url, timeout=timeout)
         if resp.status_code != 200:
             return None
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -134,7 +134,7 @@ def fetch_breaking_news(url: str = BORSA_URL) -> List[Dict[str, str]]:
     """Fetch SON DAKİKA headlines from BloombergHT /borsa."""
     items: list[dict[str, str]] = []
     try:
-        resp = requests.get(url, timeout=20, headers=HEADERS)
+        resp = _SESSION.get(url, timeout=40)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -170,7 +170,7 @@ def fetch_featured_news(url: str = BORSA_URL) -> List[Dict[str, str]]:
     """Fetch Öne Çıkan Haberler from BloombergHT /borsa."""
     items: list[dict[str, str]] = []
     try:
-        resp = requests.get(url, timeout=20, headers=HEADERS)
+        resp = _SESSION.get(url, timeout=40)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 

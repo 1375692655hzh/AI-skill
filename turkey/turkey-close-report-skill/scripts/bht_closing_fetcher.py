@@ -16,6 +16,8 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 BASE = "https://www.bloomberght.com"
 FALLBACK_URL = f"{BASE}/borsa"
@@ -27,6 +29,21 @@ HEADERS = {
     ),
     "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
 }
+
+# Module-level session with retry/backoff. BHT is behind Cloudflare and the ID
+# scan path issues many requests; a single 5xx / TLS flap shouldn't gen_fail.
+# probe_id and _forecast_scan run hundreds of requests, so retries are bounded.
+_SESSION = requests.Session()
+_SESSION.headers.update(HEADERS)
+_RETRY = Retry(
+    total=3,
+    backoff_factor=1.0,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET", "HEAD"}),
+    raise_on_status=False,
+)
+_SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
+_SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
 
 TITLE_RE = re.compile(
     r"(piyasa\s*özeti|piyasalarda\s*günün\s*özeti)\s*:", re.IGNORECASE
@@ -112,7 +129,7 @@ def _success(
 def extract_article_text(url: str, html: str | None = None) -> str:
     try:
         if html is None:
-            resp = requests.get(url, timeout=20, headers=HEADERS)
+            resp = _SESSION.get(url, timeout=40)
             resp.raise_for_status()
             html = resp.text
         soup = BeautifulSoup(html, "html.parser")
@@ -174,7 +191,7 @@ def _lookup_manifest(workdir: Path | None, target_date: date) -> Optional[dict]:
 
 def _find_in_list_page(target_date: date, list_url: str = LIST_PAGE_URL) -> Optional[dict]:
     try:
-        resp = requests.get(list_url, timeout=20, headers=HEADERS)
+        resp = _SESSION.get(list_url, timeout=40)
         resp.raise_for_status()
     except requests.RequestException as e:
         log(f"List page fetch failed: {e}")
@@ -253,7 +270,7 @@ def _record_date_to_id(cache_dir: Path, cache: dict, date_iso: str, article_id: 
 
 def fetch_rss_max_id(rss_url: str = f"{BASE}/rss") -> Optional[int]:
     try:
-        resp = requests.get(rss_url, headers=HEADERS, timeout=20)
+        resp = _SESSION.get(rss_url, timeout=40)
         resp.raise_for_status()
     except requests.RequestException as e:
         log(f"RSS max-id fetch failed: {e}")
