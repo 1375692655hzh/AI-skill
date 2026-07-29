@@ -110,19 +110,36 @@ def _extract_numbers(s: str) -> set[str]:
     Captures percentages (X.XX%), index closes / FX / commodity prices with
     optional decimal, 亿里拉 amounts. Uses non-overlapping leftmost matches so
     a price like 47.40 is recorded as one token, not split into 47 and 40.
+
+    IMPORTANT: do NOT use \\b as the boundary — in Python 3's default re.UNICODE
+    mode, Chinese characters count as word chars (\\w matches 报), so \\b does
+    NOT fire between a Chinese prefix and a digit. That caused '报47.40' to be
+    fingerprinted as just '40' (the \\b only matched between '.' and '4'),
+    producing false-positive "number not in source" errors for correct LLM
+    output. Use lookarounds anchored on digits/dots instead, which are
+    Unicode-agnostic.
     """
     fps: set[str] = set()
     # Percentages first (greedy, with optional leading -): -2.48% / 1.26%
+    # Record BOTH the full "-2.48%" and the bare "-2.48" so an output that
+    # writes the number without the trailing % still matches the source.
     for m in re.finditer(r"-?[\d.,]+%", s):
-        fps.add(m.group(0).replace(",", ".").replace(" ", ""))
+        token = m.group(0).replace(",", ".").replace(" ", "")
+        fps.add(token)
+        fps.add(token.rstrip("%"))
         s = s[: m.start()] + " " * (m.end() - m.start()) + s[m.end() :]
     # 亿里拉 amounts: 179.41亿里拉
+    # Record BOTH the full "179.41亿里拉" and the bare "179.41" so an output
+    # that drops the unit (or abbreviates it, e.g. "亿拉") still matches.
     for m in re.finditer(r"[\d.]+亿里拉", s):
-        fps.add(m.group(0))
+        full = m.group(0)
+        fps.add(full)
+        fps.add(full.replace("亿里拉", ""))
         s = s[: m.start()] + " " * (m.end() - m.start()) + s[m.end() :]
     # Prices / closes with optional decimal: 13515.54 / 47.40 / 4016 / 63996
     # Consume the whole numeric run so "47.40" is one token, not "47" + "40".
-    for m in re.finditer(r"\b\d{2,5}(?:[.,]\d{1,4})?\b", s):
+    # Lookarounds (not \b) so Chinese prefixes don't split the number.
+    for m in re.finditer(r"(?<![\d.])\d{2,5}(?:[.,]\d{1,4})?(?![\d.])", s):
         fps.add(m.group(0).replace(",", "."))
     return fps
 
