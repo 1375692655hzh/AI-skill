@@ -51,15 +51,25 @@ def validate_summary(text: str) -> dict:
         # Reject old per-broker wall (many "Name：" lines after 速览)
         m = re.search(r"券商观点速览\s*(.*?)(?=\n分歧点|\n【|$)", text, re.S)
         body = (m.group(1) if m else "").strip()
+        # Reject per-broker wall. Threshold >=3 (not 5): even a 3-broker wall
+        # means the model listed brokers instead of synthesizing consensus.
+        # Broker list covers all 38 BROKER_SLUGS plus common display-name variants
+        # (TR chars İ/Ş/ı handled case-insensitively by re.I).
         brokerish = re.findall(
-            r"(?m)^(?:A1 Capital|Ahlatcı|Alnus|Anadolu|Bizim|Bulls|Deniz|Destek|"
-            r"Garanti|Gedik|Global|ICBC|İnfo|Info|İntegral|Integral|Meksa|NCM|"
-            r"Oyak|Phillip|Şeker|Sentiment|Tacirler|Vakıf|Ziraat)[^:\n]{0,20}：",
+            r"(?m)^(?:A1 Capital|Ahlatcı|Ahlatci|Alnus|Anadolu|Acar|Ata|Allbatross|"
+            r"Bizim|Bulls|BTC|Bitci|Deniz|Destek|Colendi|"
+            r"Garanti|Gedik|Global|Halk|HSBC|ICBC|"
+            r"İnfo|Info|İntegral|Integral|İş|Is|Meksa|Marbas|"
+            r"NCM|Nurol|Osmanlı|Osmanli|Oyak|Phillip|QNB|"
+            r"Şeker|Seker|Sentiment|Tacirler|Turkish|Unlu|Ünlü|Unlu|"
+            r"Vakıf|Vakif|Yatırım Finansman|Yatirim Finansman|Ziraat)[^:\n]{0,20}：",
             body,
+            re.IGNORECASE,
         )
-        if len(brokerish) >= 5:
+        if len(brokerish) >= 3:
             errors.append(
-                "[券商观点速览] looks like per-broker wall; synthesize into "
+                "[券商观点速览] looks like per-broker wall "
+                f"({len(brokerish)} broker-named lines); synthesize into "
                 "技术位共识/宏观与事件/资金与标的 only."
             )
 

@@ -10,15 +10,50 @@ from typing import Optional
 
 
 SECTOR_CN = {
+    # transport / info / trade
     "ulaştirma": "运输",
     "ulastirma": "运输",
+    "iletişim": "通信",
+    "iletisim": "通信",
     "bilişim": "信息",
     "bilisim": "信息",
+    "teknoloji": "科技",
     "ticaret": "商业",
+    # cyclical / chemicals
     "kimya petrol plastik": "化工石油塑料",
     "taş toprak": "陶瓷土石",
     "tas toprak": "陶瓷土石",
-    "teknoloji": "科技",
+    "cam": "玻璃",
+    # financials
+    "banka": "银行",
+    "bankacılık": "银行",
+    "bankacilik": "银行",
+    "sigorta": "保险",
+    "finans": "金融",
+    "holding": "控股",
+    "gayrimenkul": "房地产",
+    # resources / energy
+    "madencilik": "矿业",
+    "metal ana sanayi": "金属工业",
+    "metal esya": "金属制品",
+    "demir çelik": "钢铁",
+    "elektrik": "电力",
+    "enerji": "能源",
+    "petrol": "石油",
+    # consumer / industrial
+    "gıda": "食品",
+    "içecek": "饮料",
+    "tekstil": "纺织",
+    "otomotiv": "汽车",
+    "inşaat": "建筑",
+    "turizm": "旅游",
+    "sağlık": "医疗",
+    "sınai": "工业",
+    "sanayi": "工业",
+    "ormancılık": "林业",
+    "orman": "林业",
+    "kağıt": "造纸",
+    "savunma": "国防",
 }
 
 
@@ -129,36 +164,30 @@ def build_morning_bht_fact_sheet(closing_text: str) -> str:
     # index snapshot for 核心观点 only (not a dedicated section)
     lines.append("【昨日收盘指数摘要｜仅供核心观点引用数字】")
     bits: list[str] = []
+    # Direction-agnostic BIST100 close parser. BHT phrasings:
+    #   yüzde -1.26 değer kaybederek 13.515.54 puanla ...
+    #   %-1.26 düşüşle 13.515.54 puandan ...
+    #   yüzde 1.21 değer kazanarak ... / %1.21 artışla ... / yükselişle ...
     m0 = re.search(
-        r"yüzde\s*(-?[\d.,]+)\s*değer kaybederek\s*([\d.]+)\s*puanla",
+        r"yüzde\s*(-?[\d.,]+)\s*(değer kaybederek|değer kazanarak)\s*([\d.,]+)\s*puan",
         text,
         re.I,
     )
     if not m0:
         m0 = re.search(
-            r"%\s*(-?[\d.,]+)\s*düşüşle\s*([\d.]+)\s*puandan",
+            r"%\s*(-?[\d.,]+)\s*(düşüşle|artışla|yükselişle)\s*([\d.,]+)\s*puan",
             text,
             re.I,
         )
-    if not m0:
-        # also handle rise
-        m0 = re.search(
-            r"yüzde\s*([\d.,]+)\s*değer kazanarak\s*([\d.]+)\s*puanla",
-            text,
-            re.I,
-        )
-        if m0:
-            chg = m0.group(1).replace(",", ".")
-            close_v = _tr_float_price(m0.group(2))
-            if close_v is not None:
-                bits.append(f"BIST 100 收涨 {chg}%")
-                bits.append(f"收盘 {_fmt_pts(close_v)} 点")
-    elif m0:
-        chg = m0.group(1).replace(",", ".").lstrip("+")
-        close_v = _tr_float_price(m0.group(2))
+    if m0:
+        chg_raw = m0.group(1).replace(",", ".").lstrip("+")
+        direction_word = m0.group(2).lower()
+        close_v = _tr_float_price(m0.group(3))
         if close_v is not None:
-            chg_disp = chg[1:] if chg.startswith("-") else chg
-            bits.append(f"BIST 100 收跌 {chg_disp}%")
+            is_down = chg_raw.startswith("-") or "kaybe" in direction_word or "düş" in direction_word
+            chg_disp = chg_raw.lstrip("-")
+            verb = "收跌" if is_down else "收涨"
+            bits.append(f"BIST 100 {verb} {chg_disp}%")
             bits.append(f"收盘 {_fmt_pts(close_v)} 点")
     high_m = re.search(r"en yüksek\s*([\d.,]+)\s*puan", text, re.I)
     low_m = re.search(r"en düşük\s*([\d.,]+)\s*puan", text, re.I)
@@ -183,12 +212,12 @@ def build_morning_bht_fact_sheet(closing_text: str) -> str:
         if parts:
             lines.append("成交额前三：" + "，".join(parts[:3]) + "。")
     gain = re.search(
-        r"En çok artan hisseler\s+([A-Za-z0-9_,\s]+?)\s+olurken",
+        r"En çok artan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olurken|\s+olarak|\.|\n)",
         text,
         re.I,
     )
     lose = re.search(
-        r"en çok azalan hisseler\s+([A-Za-z0-9_,\s]+?)\s+olarak",
+        r"en çok azalan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olarak|\s+olurken|\.|\n)",
         text,
         re.I,
     )

@@ -32,7 +32,9 @@ DEFAULT_PREFIXES = ["borsa-yorumu", "gun-ici-borsa-yorumu", "viop-yorumu", "haft
 
 
 def date_token(d: date) -> str:
-    return f"{d.day}-{d.month:02d}-{d.year}"
+    # Paraborsa slugs use zero-padded day AND month (e.g. "07-07-2026"). Both
+    # must be padded or slug_probe misses every broker on single-digit days.
+    return f"{d.day:02d}-{d.month:02d}-{d.year}"
 
 
 def dot_date(d: date) -> str:

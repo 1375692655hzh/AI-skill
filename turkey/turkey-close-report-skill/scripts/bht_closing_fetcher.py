@@ -43,6 +43,15 @@ RSS_LAG_BUFFER = 100
 MIN_RECENT_SCAN = 80
 FINAL_FALLBACK_SCAN = 200
 
+# Forecasting constants — BHT article IDs grow ~100/day, and the article often
+# gets published BEFORE /rss exposes it. Empirically the gap can exceed 500 IDs
+# (e.g. 2026-07-29: real id 3784092 vs RSS upper 3783580, delta 512). We
+# extrapolate the expected ID from historical date_to_id and scan a ±window
+# around it; this is the high-priority channel that catches fresh posts.
+FORECAST_ID_PER_DAY = 110          # conservative upper bound on daily ID growth
+FORECAST_SCAN_WINDOW = 700         # ± IDs around the extrapolated target
+FORECAST_WORKERS = 8               # parallel probes (probe_id is network-bound)
+
 
 def log(msg: str) -> None:
     print(msg, file=sys.stderr)
@@ -205,20 +214,27 @@ def _find_in_list_page(target_date: date, list_url: str = LIST_PAGE_URL) -> Opti
 
 
 def _load_bht_cache(workdir: Path | None, cache_dir: Path) -> dict:
-    for base in (workdir, cache_dir):
-        if not base:
+    empty = {"last_max_id": 0, "known_hit_ids": [], "date_to_id": {}}
+    candidate_paths: list[Path] = []
+    if workdir:
+        candidate_paths.append(Path(workdir) / ".cache" / "bht_id_cache.json")
+    # cache_dir is already the skill's .cache/turkey-close-report directory;
+    # _save_bht_cache writes directly there (no nested .cache/).
+    candidate_paths.append(Path(cache_dir) / "bht_id_cache.json")
+    # Backward-compat: older layouts nested .cache/ under cache_dir too.
+    candidate_paths.append(Path(cache_dir) / ".cache" / "bht_id_cache.json")
+    for path in candidate_paths:
+        if not path.is_file():
             continue
-        path = base / ".cache" / "bht_id_cache.json"
-        if path.is_file():
-            try:
-                cache = json.loads(path.read_text(encoding="utf-8"))
-                cache.setdefault("date_to_id", {})
-                cache.setdefault("known_hit_ids", [])
-                cache.setdefault("last_max_id", 0)
-                return cache
-            except Exception:
-                pass
-    return {"last_max_id": 0, "known_hit_ids": [], "date_to_id": {}}
+        try:
+            cache = json.loads(path.read_text(encoding="utf-8"))
+            cache.setdefault("date_to_id", {})
+            cache.setdefault("known_hit_ids", [])
+            cache.setdefault("last_max_id", 0)
+            return cache
+        except Exception:
+            continue
+    return empty
 
 
 def _save_bht_cache(cache_dir: Path, cache: dict) -> None:
@@ -341,6 +357,75 @@ def _scan_with_cache(
     return hits
 
 
+def _forecast_target_id(
+    target_date: date,
+    date_to_id: dict[str, int],
+) -> Optional[int]:
+    """Extrapolate today's expected article ID from historical (date, id) pairs.
+
+    BHT's closing-review article ID grows ~100/day. The article is published
+    ~1h after close but /rss lags further, so the RSS upper bound can be 500+
+    IDs stale. A linear extrapolation from any two past hits lands within a
+    few hundred IDs of the real value.
+    """
+    if not date_to_id:
+        return None
+    pairs: list[tuple[date, int]] = []
+    for d_iso, aid in date_to_id.items():
+        try:
+            pairs.append((date.fromisoformat(d_iso), int(aid)))
+        except (ValueError, TypeError):
+            continue
+    if not pairs:
+        return None
+    pairs.sort()
+    # Prefer the two most recent entries for the slope estimate.
+    d0, id0 = pairs[-1]
+    if len(pairs) >= 2:
+        d1, id1 = pairs[-2]
+        days = (d0 - d1).days or 1
+        per_day = max((id0 - id1) // days, 1)
+        per_day = min(per_day, FORECAST_ID_PER_DAY * 2)  # sanity cap
+    else:
+        per_day = FORECAST_ID_PER_DAY
+    delta_days = (target_date - d0).days
+    if delta_days < 0:
+        delta_days = 0
+    return id0 + delta_days * per_day
+
+
+def _forecast_scan(
+    target_date: date,
+    cache_dir: Path,
+    cache: dict,
+    date_iso: str,
+) -> Optional[dict]:
+    """Probe a ±window around the extrapolated article ID in parallel."""
+    center = _forecast_target_id(target_date, cache.get("date_to_id", {}))
+    if not center:
+        return None
+    lo = max(center - FORECAST_SCAN_WINDOW, 1)
+    hi = center + FORECAST_SCAN_WINDOW
+    log(f"Forecast scan around {center} (range [{lo}, {hi}], target {date_iso})")
+    candidates = list(range(hi, lo - 1, -1))
+    with ThreadPoolExecutor(max_workers=FORECAST_WORKERS) as ex:
+        futures = {ex.submit(probe_id, aid, 2): aid for aid in candidates}
+        for fut in as_completed(futures):
+            art = fut.result()
+            if art and art.get("date") == target_date:
+                _record_date_to_id(cache_dir, cache, date_iso, art["id"])
+                text = extract_article_text(art["url"], art.get("html"))
+                return _success(
+                    target_date,
+                    title=art["title"],
+                    url=art["url"],
+                    text=text,
+                    method="forecast_scan",
+                    article_id=art["id"],
+                )
+    return None
+
+
 def _find_by_id_scan(
     target_date: date,
     cache_dir: Path,
@@ -364,6 +449,13 @@ def _find_by_id_scan(
                 method="date_to_id",
                 article_id=art["id"],
             )
+
+    # Forecast scan — high priority. /rss lags the real article by 500+ IDs
+    # (article is published before RSS exposes it), so extrapolating from
+    # historical date_to_id is far more reliable than the RSS upper bound.
+    forecast_hit = _forecast_scan(target_date, cache_dir, cache, date_iso)
+    if forecast_hit:
+        return forecast_hit
 
     upper = fetch_rss_max_id(rss_url)
     if not upper:

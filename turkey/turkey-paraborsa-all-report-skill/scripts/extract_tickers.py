@@ -26,7 +26,7 @@ KNOWN_TICKERS = {
     "TUKAS", "TUPRS", "TUREX", "TURSG", "ULKER", "VAKBN", "VESTL", "YKBNK", "ZOREN",
     "GENIL", "GLRMK", "GRSEL", "GRTHO", "GSRAY", "IZENR", "KLRHO", "KUYAS", "OBAMS",
     "PASEU", "PATEK", "PSGYO", "REEDR", "SARKY", "TABGD", "EUREN", "CVKMD", "DAPGM",
-    "BIMAS", "LOGO", "ASELSAN",
+    "LOGO",
 }
 
 TICKER_RE = re.compile(r"\b[A-ZÇĞİÖŞÜ]{2,6}\b")
@@ -51,10 +51,27 @@ def extract_tickers(text: str, *, extra: Iterable[str] | None = None) -> list[st
 
 
 def tickers_by_article(articles: list[dict]) -> dict[str, list[str]]:
+    """Map broker_slug → union of tickers across ALL of that broker's articles.
+
+    A broker often posts multiple article types on the same day (borsa-yorumu +
+    viop-yorumu). Using assignment would silently drop the first article's
+    tickers; we merge instead so the ticker→broker index is complete.
+    """
     out: dict[str, list[str]] = {}
     for art in articles:
         if art.get("fetch_status") != "ok":
             continue
         key = art.get("broker_slug") or art.get("slug", "")
-        out[key] = extract_tickers(art.get("content", ""))
+        if not key:
+            continue
+        new_tickers = extract_tickers(art.get("content", ""))
+        if key in out:
+            # Union preserving order: append only tickers not already present
+            existing = set(out[key])
+            for t in new_tickers:
+                if t not in existing:
+                    out[key].append(t)
+                    existing.add(t)
+        else:
+            out[key] = new_tickers
     return out

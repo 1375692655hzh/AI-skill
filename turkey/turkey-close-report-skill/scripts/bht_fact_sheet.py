@@ -6,17 +6,53 @@ import re
 from typing import Optional
 
 
-# Turkish sector name -> Chinese (BHT wording)
+# Turkish sector name -> Chinese (BHT wording). Covers all sectors that appear
+# in real BHT closing reviews 2026-07-27/28/29 plus common BIST sector labels.
 SECTOR_CN = {
+    # transport / info / trade
     "ulaştirma": "运输",
     "ulastirma": "运输",
+    "iletişim": "通信",
+    "iletisim": "通信",
     "bilişim": "信息",
     "bilisim": "信息",
+    "teknoloji": "科技",
     "ticaret": "商业",
+    # cyclical / chemicals
     "kimya petrol plastik": "化工石油塑料",
     "taş toprak": "陶瓷土石",
     "tas toprak": "陶瓷土石",
-    "teknoloji": "科技",
+    "cam": "玻璃",
+    # financials
+    "banka": "银行",
+    "bankacılık": "银行",
+    "bankacilik": "银行",
+    "sigorta": "保险",
+    "finans": "金融",
+    "holding": "控股",
+    "gayrimenkul": "房地产",
+    # resources / energy
+    "madencilik": "矿业",
+    "metal ana sanayi": "金属工业",
+    "metal esya": "金属制品",
+    "demir çelik": "钢铁",
+    "elektrik": "电力",
+    "enerji": "能源",
+    "petrol": "石油",
+    # consumer / industrial
+    "gıda": "食品",
+    "içecek": "饮料",
+    "tekstil": "纺织",
+    "otomotiv": "汽车",
+    "inşaat": "建筑",
+    "turizm": "旅游",
+    "sağlık": "医疗",
+    "sınai": "工业",
+    "sanayi": "工业",
+    "ormancılık": "林业",
+    "orman": "林业",
+    "kağıt": "造纸",
+    "savunma": "国防",
 }
 
 
@@ -123,23 +159,30 @@ def build_bht_fact_sheet(closing_text: str) -> str:
 
     lines.append("【大盘概况事实】")
     bits: list[str] = []
+    # Direction-agnostic BIST100 close parser. BHT uses several phrasings:
+    #   ... yüzde -1.26 değer kaybederek 13.515.54 puanla ...
+    #   ... %-1.26 düşüşle 13.515.54 puandan ...
+    #   ... yüzde 1.21 değer kazanarak ... / %1.21 artışla ... / yükselişle ...
     m0 = re.search(
-        r"yüzde\s*(-?[\d.,]+)\s*değer kaybederek\s*([\d.]+)\s*puanla",
+        r"yüzde\s*(-?[\d.,]+)\s*(değer kaybederek|değer kazanarak)\s*([\d.,]+)\s*puan",
         text,
         re.I,
     )
     if not m0:
         m0 = re.search(
-            r"%\s*(-?[\d.,]+)\s*düşüşle\s*([\d.]+)\s*puandan",
+            r"%\s*(-?[\d.,]+)\s*(düşüşle|artışla|yükselişle)\s*([\d.,]+)\s*puan",
             text,
             re.I,
         )
     if m0:
-        chg = m0.group(1).replace(",", ".").lstrip("+")
-        close_v = _tr_float_price(m0.group(2))
+        chg_raw = m0.group(1).replace(",", ".").lstrip("+")
+        direction_word = m0.group(2).lower()
+        close_v = _tr_float_price(m0.group(3))
         if close_v is not None:
-            chg_disp = chg[1:] if chg.startswith("-") else chg
-            bits.append(f"BIST 100 收跌 {chg_disp}%")
+            is_down = chg_raw.startswith("-") or "kaybe" in direction_word or "düş" in direction_word
+            chg_disp = chg_raw.lstrip("-")
+            verb = "收跌" if is_down else "收涨"
+            bits.append(f"BIST 100 {verb} {chg_disp}%")
             bits.append(f"收盘 {_fmt_pts(close_v)} 点")
 
     high_v = _tr_float_price(high_m.group(1)) if high_m else None
@@ -168,12 +211,12 @@ def build_bht_fact_sheet(closing_text: str) -> str:
         if parts:
             lines.append("成交额前三：" + "，".join(parts) + "。")
     gain = re.search(
-        r"En çok artan hisseler\s+([A-Za-z0-9_,\s]+?)\s+olurken",
+        r"En çok artan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olurken|\s+olarak|\.|\n)",
         text,
         re.I,
     )
     lose = re.search(
-        r"en çok azalan hisseler\s+([A-Za-z0-9_,\s]+?)\s+olarak",
+        r"en çok azalan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olarak|\s+olurken|\.|\n)",
         text,
         re.I,
     )
@@ -205,38 +248,62 @@ def build_bht_fact_sheet(closing_text: str) -> str:
     # --- fx / commodities ---
     lines.append("【汇市与大宗商品事实】")
     fx_bits = []
-    usd = re.search(r"Dolar/TL.*?%([\d.,]+)\s*artışla\s*([\d.,]+)\s*TL", text, re.I | re.S)
+    # Direction-agnostic USD/TRY and EUR/TRY. BHT wording:
+    #   ... %0.01 artışla 47.40 TL'de ...   (up)
+    #   ... %-0.01 düşüşle 53.97 TL'den ...  (down)
+    usd = re.search(
+        r"Dolar/TL.*?%(-?[\d.,]+)\s*(artışla|düşüşle|yükselişle)\s*([\d.,]+)\s*TL",
+        text,
+        re.I | re.S,
+    )
     if usd:
+        pct = usd.group(1).replace(",", ".").lstrip("+")
+        is_down = pct.startswith("-") or "düş" in usd.group(2).lower()
+        verb = "下跌" if is_down else "上涨"
         fx_bits.append(
-            f"美元/里拉上涨 {usd.group(1).replace(',', '.')}%，报 {usd.group(2).replace(',', '.')} "
+            f"美元/里拉{verb} {pct.lstrip('-')}%，报 {usd.group(3).replace(',', '.')} "
         )
-    eur = re.search(r"Euro/TL.*?%([\d.,]+)\s*artışla\s*([\d.,]+)\s*TL", text, re.I | re.S)
+    eur = re.search(
+        r"Euro/TL.*?%(-?[\d.,]+)\s*(artışla|düşüşle|yükselişle)\s*([\d.,]+)\s*TL",
+        text,
+        re.I | re.S,
+    )
     if eur:
+        pct = eur.group(1).replace(",", ".").lstrip("+")
+        is_down = pct.startswith("-") or "düş" in eur.group(2).lower()
+        verb = "下跌" if is_down else "上涨"
         fx_bits.append(
-            f"欧元/里拉上涨 {eur.group(1).replace(',', '.')}%，报 {eur.group(2).replace(',', '.')}"
+            f"欧元/里拉{verb} {pct.lstrip('-')}%，报 {eur.group(3).replace(',', '.')}"
         )
     if fx_bits:
         lines.append("；".join(fx_bits).strip() + "。")
 
     oz = re.search(
-        r"ons altın.*?([\d.,]+)\s*dolar.*?%\s*([\d.,]+)",
+        r"ons altın.*?([\d.,]+)\s*dolar.*?%(-?[\d.,]+)",
         text,
         re.I | re.S,
     )
+    # gram altın: BHT writes both "... %X artışla Y lira" and "... %-X düşüşle Y liradan"
     gram = re.search(
-        r"gram altın\s*%\s*([\d.,]+)\s*artışla\s*([\d.,]+)\s*lira",
+        r"gram altın\s+%?(-?[\d.,]+)\s*(artışla|düşüşle|yükselişle)\s*([\d.,]+)\s*lira",
         text,
         re.I,
     )
     gold_bits = []
     if oz:
-        pct = oz.group(2).replace(",", ".").rstrip(".")
+        pct = oz.group(2).replace(",", ".").lstrip("+").rstrip(".")
+        sign = "-" if pct.startswith("-") else ""
         gold_bits.append(
-            f"国际金价报 {_fmt_pts(_tr_float_price(oz.group(1)) or 0)} 美元/盎司，较前一日变动 +{pct}%"
+            f"国际金价报 {_fmt_pts(_tr_float_price(oz.group(1)) or 0)} 美元/盎司，"
+            f"较前一日变动 {sign}{pct.lstrip('-')}%"
         )
     if gram:
+        pct = gram.group(1).replace(",", ".").lstrip("+")
+        is_down = pct.startswith("-") or "düş" in gram.group(2).lower()
+        sign = "-" if (pct.startswith("-") or is_down) else ""
         gold_bits.append(
-            f"克金报 {_fmt_pts(_tr_float_price(gram.group(2)) or 0)} 里拉，较前一日上涨 {gram.group(1).replace(',', '.')}%"
+            f"克金报 {_fmt_pts(_tr_float_price(gram.group(3)) or 0)} 里拉，"
+            f"较前一日{'下跌' if is_down else '上涨'} {pct.lstrip('-')}%"
         )
     cq = re.search(
         r"Çeyrek altının alış fiyatı.*?([\d.,]+)\s*TL.*?satış fiyatı\s*([\d.,]+)\s*TL",

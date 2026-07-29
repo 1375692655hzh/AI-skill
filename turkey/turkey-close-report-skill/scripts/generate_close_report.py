@@ -24,7 +24,7 @@ from resolve_target_date import resolve_target_date, today_tr, is_trading_day_op
 from runtime_utils import configure_stdio, resolve_paths
 from validate_brief_output import validate_brief
 from validate_output import validate
-from bht_fact_sheet import format_bloomberght_for_prompt
+from bht_fact_sheet import format_bloomberght_for_prompt, build_bht_fact_sheet
 
 
 WEEKDAYS_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -109,9 +109,15 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     closing_text = bloomberght.get("closing_review", {}).get("text", "")
     if closing_text and not is_content_for_date(target_date, closing_text, "bloomberght"):
         print(f"Warning: closing review date mismatch, discarding cache for {target_date}")
-        cache_file = cache_dir / f"bloomberght_close_{target_date.isoformat()}.json"
-        if cache_file.exists():
-            cache_file.unlink()
+        # Purge BOTH cache layers: the wrapper and the fetcher's internal cache,
+        # otherwise fetch_closing_review silently re-reads the stale inner file.
+        for fname in (
+            f"bloomberght_close_{target_date.isoformat()}.json",
+            f"bloomberght_closing_{target_date.isoformat()}.json",
+        ):
+            cf = cache_dir / fname
+            if cf.exists():
+                cf.unlink()
         bloomberght = fetch_close_review(
             target_date,
             cache_dir,
@@ -161,7 +167,17 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
         return prompt_file
 
     llm_cfg = config["llm"]
-    content, result = generate_with_validation(prompt, llm_cfg, validate)
+    # Build the BHT fact card once and pass it to the validator as the
+    # data-provenance fingerprint, so fabricated numbers/percentages are caught.
+    source_facts = build_bht_fact_sheet(
+        bloomberght.get("closing_review", {}).get("text", "")
+    ) if bloomberght.get("ok") else None
+    validate_with_source = (
+        (lambda text: validate(text, source_facts=source_facts))
+        if source_facts
+        else validate
+    )
+    content, result = generate_with_validation(prompt, llm_cfg, validate_with_source)
     if content is None or not result.get("ok"):
         if content:
             raw_output = cache_dir / f"close_raw_output_{target_date.isoformat()}.txt"

@@ -219,7 +219,25 @@ def fetch_all_news(
             cached = json.loads(cache_file.read_text(encoding="utf-8"))
             closing = cached.get("closing_review") or {}
             if cached.get("ok") and closing.get("ok"):
-                return cached
+                # Only the closing review is date-stable and safe to reuse.
+                # Breaking/featured news MUST be re-fetched live every run,
+                # otherwise stale yesterday headlines bleed into today's prompt.
+                print("Closing review cache hit; re-fetching live news...", file=sys.stderr)
+                breaking = fetch_breaking_news()
+                featured = fetch_featured_news()
+                result = {
+                    "ok": True,
+                    "target_date": target_date.isoformat(),
+                    "source": "bloomberght",
+                    "closing_review": closing,
+                    "breaking_news": breaking,
+                    "featured_news": featured,
+                    "total_items": len(breaking) + len(featured) + 1,
+                }
+                cache_file.write_text(
+                    json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                return result
         except Exception:
             pass
 

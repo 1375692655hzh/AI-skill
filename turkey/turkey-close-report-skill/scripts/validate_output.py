@@ -104,7 +104,30 @@ def _slots_are_consecutive_lines(body: str, slots: tuple[str, ...]) -> bool:
     return True
 
 
-def validate(text: str) -> dict:
+def _extract_numbers(s: str) -> set[str]:
+    """Fingerprint all numeric tokens in source text for provenance check.
+
+    Captures percentages (X.XX%), index closes / FX / commodity prices with
+    optional decimal, 亿里拉 amounts. Uses non-overlapping leftmost matches so
+    a price like 47.40 is recorded as one token, not split into 47 and 40.
+    """
+    fps: set[str] = set()
+    # Percentages first (greedy, with optional leading -): -2.48% / 1.26%
+    for m in re.finditer(r"-?[\d.,]+%", s):
+        fps.add(m.group(0).replace(",", ".").replace(" ", ""))
+        s = s[: m.start()] + " " * (m.end() - m.start()) + s[m.end() :]
+    # 亿里拉 amounts: 179.41亿里拉
+    for m in re.finditer(r"[\d.]+亿里拉", s):
+        fps.add(m.group(0))
+        s = s[: m.start()] + " " * (m.end() - m.start()) + s[m.end() :]
+    # Prices / closes with optional decimal: 13515.54 / 47.40 / 4016 / 63996
+    # Consume the whole numeric run so "47.40" is one token, not "47" + "40".
+    for m in re.finditer(r"\b\d{2,5}(?:[.,]\d{1,4})?\b", s):
+        fps.add(m.group(0).replace(",", "."))
+    return fps
+
+
+def validate(text: str, *, source_facts: str | None = None) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -234,6 +257,32 @@ def validate(text: str) -> dict:
             )
         elif n_sent < 3:
             warnings.append(f"[{title}] fewer than 3 sentences; each slot should be one sentence.")
+
+    # Data-provenance check: numbers in the four fact sections must appear in the
+    # BHT source fingerprint. Catches LLM-fabricated percentages/prices/tickers.
+    if source_facts:
+        src_fps = _extract_numbers(source_facts)
+        # Tolerate formatting differences: also store comma/dot-stripped forms.
+        extra = set()
+        for fp in list(src_fps):
+            extra.add(fp.replace(",", ""))
+            extra.add(fp.replace(".", ""))
+        src_fps |= extra
+        # Common non-data numbers to ignore: years, day counts, section ordinals
+        ignore = {str(y) for y in range(2020, 2031)} | {"1", "2", "3", "100"}
+        for title in FACT_SECTIONS:
+            body = _extract_section(text, title)
+            if not body:
+                continue
+            out_fps = _extract_numbers(body) - ignore
+            # Strict membership: number must appear verbatim in source fingerprint.
+            # (Substring matching is too loose — "99999" would slip through via "99".)
+            suspicious = sorted(fp for fp in out_fps if fp not in src_fps)
+            if suspicious:
+                errors.append(
+                    f"[{title}] numbers not found in BHT source: {suspicious[:8]}. "
+                    "Only reuse figures that appear in the BHT fact card; do not fabricate."
+                )
 
     attribution = validate_no_attribution(text)
     errors.extend(attribution["errors"])
