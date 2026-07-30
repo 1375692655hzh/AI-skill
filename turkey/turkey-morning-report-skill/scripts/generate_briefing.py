@@ -19,9 +19,10 @@ from bht_fact_sheet import format_closing_for_morning_prompt
 from fetch_bloomberght_closing import fetch_closing_review, fetch_today_headlines
 from fetch_live_quotes import fetch_live_quotes
 from fetch_news import fetch_news
-from llm_runner import generate_with_validation
+from llm_runner import generate_brief_with_retry, generate_with_validation
 from resolve_target_date import resolve_dates
 from runtime_utils import configure_stdio, resolve_paths
+from source_header import prepend_header
 from fetch_aa_top_stories import fetch_aa_top_stories
 from news_fact_sheet import build_international_news_card
 from validate_brief_output import validate_brief
@@ -104,6 +105,7 @@ def main() -> int:
     closing_material = format_closing_for_morning_prompt(
         closing_text if closing.get("ok") else "",
         live_fact_cn=live.get("fact_cn") or "",
+        live_quotes=live,
     )
 
     news_cfg = config.get("sources", {}).get("news", {})
@@ -137,6 +139,7 @@ def main() -> int:
 
     aa_cfg = news_cfg.get("aa_morning", {})
     aa_titles: list[str] = []
+    aa: dict = {"ok": False, "titles": [], "error": ""}
     if aa_cfg.get("enabled", True):
         aa = fetch_aa_top_stories(
             date.fromisoformat(today_date),
@@ -210,6 +213,48 @@ def main() -> int:
     # 只要换行、不要空行
     output = re.sub(r"\n{2,}", "\n", output.replace("\r\n", "\n")).strip() + "\n"
 
+    # 数据来源元数据：每个抓取源的 URL + 状态
+    cr = (closing.get("closing_review") or {}) if closing.get("ok") else {}
+    bht_url = cr.get("url") or "https://www.bloomberght.com/borsa/kapanis"
+    bht_detail = ""
+    if cr.get("article_id"):
+        bht_detail = f"文章 id={cr['article_id']}"
+    elif closing.get("ok"):
+        bht_detail = "已抓取前一交易日收盘综述"
+    xu = (live.get("quotes") or {}).get("XU100") or {}
+    xu_status = live.get("xu100_status") or ""
+    xu_detail = f"XU100={xu.get('last')} ({xu.get('pct')}%) [{xu_status}]" if xu else ""
+    break_n = len(breaking) if isinstance(breaking, list) else 0
+    feat_n = len(featured) if isinstance(featured, list) else 0
+    sources = [
+        {
+            "name": "BHT 收评文章（前一交易日）",
+            "url": bht_url,
+            "status": "ok" if closing.get("ok") else "fail",
+            "detail": bht_detail or (closing.get("error") or ""),
+        },
+        {
+            "name": "BHT 实时行情 /piyasalar",
+            "url": "https://www.bloomberght.com/piyasalar",
+            "status": "ok" if live.get("ok") else "fail",
+            "detail": xu_detail or (live.get("error") or ""),
+        },
+        {
+            "name": "BHT 今日头条",
+            "url": "https://www.bloomberght.com/sondakika",
+            "status": "ok" if (break_n or feat_n) else "fail",
+            "detail": f"突发 {break_n} 条 / 重点 {feat_n} 条",
+        },
+        {
+            "name": "AA TOP STORIES",
+            "url": aa.get("url") or "https://www.aa.com.tr/en/world",
+            "status": "ok" if aa.get("ok") else "fail",
+            "detail": (f"{len(aa_titles)} 条" if aa_titles else "") or (aa.get("error") or ""),
+        },
+    ]
+    title = f"土耳其股市早评 — {today_date}"
+    output = prepend_header(output, sources, title=title)
+
     output_file.write_text(output, encoding="utf-8")
     print(f"Briefing written to: {output_file}")
 
@@ -222,18 +267,28 @@ def main() -> int:
             "max_tokens": brief_cfg.get("max_tokens", 1200),
             "temperature": brief_cfg.get("temperature", 0.3),
         }
-        brief_output, brief_validation = generate_with_validation(
+        brief_output, brief_validation = generate_brief_with_retry(
             brief_prompt,
             brief_llm_cfg,
             lambda text: validate_brief(
                 text,
-                min_chars=brief_cfg.get("min_chars", 400),
-                max_chars=brief_cfg.get("max_chars", 500),
+                min_chars=brief_cfg.get("min_chars", 200),
+                max_chars=brief_cfg.get("max_chars", 520),
+            ),
+            fix_hint=(
+                "首行必须是【土耳其股市早报简报 — 日期】；"
+                "字段顺序固定：【指数】【汇率】【驱动】【个股】【板块】【操作】【风险】；"
+                "【个股】标签独占一行，其后 3–5 只个股，每只一行，格式「代码 涨跌/要点」；"
+                "禁止列表符号、Markdown、表格、Emoji；"
+                "篇幅 200–520 个汉字+中文标点（英文代码、数字不计入）；"
+                "只要换行、不要空行。"
             ),
         )
         if brief_output and brief_validation.get("ok"):
             brief_file.write_text(brief_output, encoding="utf-8")
             print(f"Brief briefing written to: {brief_file}")
+            if brief_validation.get("warnings"):
+                print(f"Brief warnings (non-blocking): {brief_validation['warnings']}", file=sys.stderr)
         else:
             print(f"Brief validation failed: {brief_validation.get('errors', [])}", file=sys.stderr)
             if brief_output:

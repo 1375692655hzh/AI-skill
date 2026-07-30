@@ -150,8 +150,19 @@ def _map_sectors(raw: str) -> list[str]:
     return out
 
 
-def build_morning_bht_fact_sheet(closing_text: str) -> str:
-    """Chinese fact lines for 【关键个股】【行业板块表现】 from prior-day BHT close."""
+def build_morning_bht_fact_sheet(
+    closing_text: str,
+    index_override: Optional[dict] = None,
+) -> str:
+    """Chinese fact lines for 【关键个股】【行业板块表现】 from prior-day BHT close.
+
+    index_override (optional): live XU100 snapshot from /piyasalar, shape
+    ``{"last": float, "pct": float}``. When supplied, it overrides the BIST 100
+    close / pct parsed from the close-review article (the article has been
+    observed to publish stale or mistyped index numbers; the live market page
+    is authoritative). The article's intraday high/low are kept because the
+    market page does not expose them.
+    """
     raw = closing_text or ""
     text = normalize_bht_text(raw)
     lines: list[str] = []
@@ -183,10 +194,20 @@ def build_morning_bht_fact_sheet(closing_text: str) -> str:
         chg_raw = m0.group(1).replace(",", ".").lstrip("+")
         direction_word = m0.group(2).lower()
         close_v = _tr_float_price(m0.group(3))
-        if close_v is not None:
+        # Override article index with live XU100 when available (authoritative).
+        if index_override and index_override.get("last") is not None:
+            close_v = float(index_override["last"])
+            ov_pct = index_override.get("pct")
+            if ov_pct is not None:
+                chg_raw = f"{float(ov_pct):.2f}"
+                is_down = float(ov_pct) < 0
+            else:
+                is_down = chg_raw.startswith("-") or "kaybe" in direction_word or "düş" in direction_word
+        else:
             is_down = chg_raw.startswith("-") or "kaybe" in direction_word or "düş" in direction_word
-            chg_disp = chg_raw.lstrip("-")
-            verb = "收跌" if is_down else "收涨"
+        chg_disp = chg_raw.lstrip("-")
+        verb = "收跌" if is_down else "收涨"
+        if close_v is not None:
             bits.append(f"BIST 100 {verb} {chg_disp}%")
             bits.append(f"收盘 {_fmt_pts(close_v)} 点")
     high_m = re.search(r"en yüksek\s*([\d.,]+)\s*puan", text, re.I)
@@ -243,11 +264,29 @@ def build_morning_bht_fact_sheet(closing_text: str) -> str:
     return "\n".join(lines)
 
 
-def format_closing_for_morning_prompt(closing_text: str, live_fact_cn: str = "") -> str:
-    """Closing text + BHT stock/sector card + live FX/commodity card."""
+def format_closing_for_morning_prompt(
+    closing_text: str,
+    live_fact_cn: str = "",
+    live_quotes: Optional[dict] = None,
+) -> str:
+    """Closing text + BHT stock/sector card + live FX/commodity card.
+
+    live_quotes: full payload from fetch_live_quotes (the quotes dict carries
+    XU100 too). Used to override the close-review article's BIST 100 numbers,
+    but ONLY when the page is showing the prior close (pre_market). After
+    Istanbul opens (TR 10:00) the live XU100 becomes today's intraday price
+    and must NOT override the prior-day close used by the morning briefing.
+    """
     raw = closing_text or ""
     normalized = normalize_bht_text(raw)
-    sheet = build_morning_bht_fact_sheet(raw)
+    index_override = None
+    if live_quotes and live_quotes.get("quotes", {}).get("XU100"):
+        # Morning briefing reports on YESTERDAY's close; only trust the live
+        # page when it still shows yesterday's close (pre_market).
+        if live_quotes.get("xu100_status") == "pre_market":
+            xu = live_quotes["quotes"]["XU100"]
+            index_override = {"last": xu.get("last"), "pct": xu.get("pct")}
+    sheet = build_morning_bht_fact_sheet(raw, index_override=index_override)
     blocks = [
         "【前一交易日收盘数据｜已换算亿里拉、已去掉钟点】",
         normalized,

@@ -141,8 +141,17 @@ def normalize_bht_text(text: str) -> str:
     return out
 
 
-def build_bht_fact_sheet(closing_text: str) -> str:
-    """Extract factual lines for 大盘/个股/板块/汇市大宗 — Chinese, no analysis."""
+def build_bht_fact_sheet(
+    closing_text: str,
+    index_override: Optional[dict] = None,
+) -> str:
+    """Extract factual lines for 大盘/个股/板块/汇市大宗 — Chinese, no analysis.
+
+    index_override (optional): live XU100 snapshot {"last": float, "pct": float}
+    from /piyasalar. When supplied, overrides the article's BIST 100 close/pct
+    (article has been observed stale/mistyped; live page is authoritative).
+    Intraday high/low still come from the article.
+    """
     raw = closing_text or ""
     # Strip clocks first so "saat 18:30" does not break gold/oil number capture.
     text = normalize_bht_text(raw)
@@ -178,10 +187,19 @@ def build_bht_fact_sheet(closing_text: str) -> str:
         chg_raw = m0.group(1).replace(",", ".").lstrip("+")
         direction_word = m0.group(2).lower()
         close_v = _tr_float_price(m0.group(3))
-        if close_v is not None:
+        if index_override and index_override.get("last") is not None:
+            close_v = float(index_override["last"])
+            ov_pct = index_override.get("pct")
+            if ov_pct is not None:
+                chg_raw = f"{float(ov_pct):.2f}"
+                is_down = float(ov_pct) < 0
+            else:
+                is_down = chg_raw.startswith("-") or "kaybe" in direction_word or "düş" in direction_word
+        else:
             is_down = chg_raw.startswith("-") or "kaybe" in direction_word or "düş" in direction_word
-            chg_disp = chg_raw.lstrip("-")
-            verb = "收跌" if is_down else "收涨"
+        chg_disp = chg_raw.lstrip("-")
+        verb = "收跌" if is_down else "收涨"
+        if close_v is not None:
             bits.append(f"BIST 100 {verb} {chg_disp}%")
             bits.append(f"收盘 {_fmt_pts(close_v)} 点")
 
@@ -379,11 +397,22 @@ def _map_sectors(raw: str) -> list[str]:
     return out
 
 
-def format_bloomberght_for_prompt(data: dict) -> str:
-    """Closing text normalized + fact sheet; optional news kept outside factual-card scope."""
+def format_bloomberght_for_prompt(data: dict, live_quotes: Optional[dict] = None) -> str:
+    """Closing text normalized + fact sheet; optional news kept outside factual-card scope.
+
+    live_quotes: full payload from fetch_live_quotes (carries XU100 in quotes
+    dict). Used to override the close-review article's BIST 100 numbers. The
+    close report runs after market close, so any non-pre_market reading
+    (intraday or after_close) reflects TODAY and is preferred over the article.
+    """
     raw = (data.get("closing_review") or {}).get("text") or ""
     normalized = normalize_bht_text(raw)
-    sheet = build_bht_fact_sheet(raw)
+    index_override = None
+    if live_quotes and live_quotes.get("quotes", {}).get("XU100"):
+        if live_quotes.get("xu100_status") in ("intraday", "after_close"):
+            xu = live_quotes["quotes"]["XU100"]
+            index_override = {"last": xu.get("last"), "pct": xu.get("pct")}
+    sheet = build_bht_fact_sheet(raw, index_override=index_override)
     blocks = ["【收盘数据｜已换算亿里拉、已去掉钟点】", normalized, "", sheet]
     # News intentionally NOT required for the four factual sections
     if data.get("breaking_news"):

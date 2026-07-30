@@ -19,9 +19,11 @@ from check_source_date import is_content_for_date
 from fetch_bloomberght import fetch_close_review
 from fetch_info_yatirim import fetch_info_yatirim
 from fetch_paraborsa import fetch_paraborsa
-from llm_runner import generate_with_validation
+from fetch_live_quotes import fetch_live_quotes
+from llm_runner import generate_brief_with_retry, generate_with_validation
 from resolve_target_date import resolve_target_date, today_tr, is_trading_day_open
 from runtime_utils import configure_stdio, resolve_paths
+from source_header import prepend_header
 from validate_brief_output import validate_brief
 from validate_output import validate
 from bht_fact_sheet import format_bloomberght_for_prompt, build_bht_fact_sheet
@@ -61,9 +63,13 @@ def resolve_brief_template(skill_dir: Path, config: dict) -> Path | None:
     return None
 
 
-def format_bloomberght(data: dict) -> str:
-    """BHT close text: TL→亿里拉, strip clocks, plus Chinese fact card for four sections."""
-    return format_bloomberght_for_prompt(data)
+def format_bloomberght(data: dict, live_quotes: dict | None = None) -> str:
+    """BHT close text: TL→亿里拉, strip clocks, plus Chinese fact card for four sections.
+
+    live_quotes (optional): used to override the article's BIST 100 close/pct
+    with the authoritative number from /piyasalar market page.
+    """
+    return format_bloomberght_for_prompt(data, live_quotes=live_quotes)
 
 
 def format_paraborsa(data: dict) -> str:
@@ -140,6 +146,15 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     if not bloomberght.get("ok"):
         print(f"Warning: closing review not found for {target_date}")
 
+    # Live XU100 from /piyasalar overrides the close-review article's BIST 100
+    # close/pct (article has been observed stale/mistyped; market page is
+    # authoritative). Fetched unconditionally — after TR close the page shows
+    # the same-day close; before close it shows prior close, which still
+    # corrects stale article numbers.
+    live_quotes = fetch_live_quotes(cache_dir)
+    if not live_quotes.get("ok"):
+        print(f"Warning: live quotes (XU100) fetch failed: {live_quotes.get('error')}")
+
     paraborsa = fetch_paraborsa(target_date, cache_dir)
     selected_content = paraborsa.get("selected", {}).get("content", "")
     selected_title = paraborsa.get("selected", {}).get("title", "")
@@ -165,7 +180,7 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
         today_date=target_date.isoformat(),
         target_date=target_date.isoformat(),
         weekday_cn=weekday_cn,
-        bloomberght_text=format_bloomberght(bloomberght),
+        bloomberght_text=format_bloomberght(bloomberght, live_quotes=live_quotes),
         paraborsa_text=format_paraborsa(paraborsa),
         info_yatirim_text=format_info_yatirim(info_yatirim),
     )
@@ -204,6 +219,57 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     # 只要换行、不要空行：折叠多余空行
     content = re.sub(r"\n{2,}", "\n", content.replace("\r\n", "\n")).strip() + "\n"
 
+    # 数据来源元数据：每个抓取源的 URL + 状态
+    cr = bloomberght.get("closing_review") or {}
+    bht_url = cr.get("url") or "https://www.bloomberght.com/borsa/kapanis"
+    bht_detail = ""
+    if cr.get("article_id"):
+        bht_detail = f"文章 id={cr['article_id']}"
+    elif bloomberght.get("ok"):
+        bht_detail = "已抓取收盘综述"
+    xu = (live_quotes.get("quotes") or {}).get("XU100") or {}
+    xu_status = live_quotes.get("xu100_status") or ""
+    xu_detail = ""
+    if xu:
+        xu_detail = f"XU100={xu.get('last')} ({xu.get('pct')}%) [{xu_status}]"
+    par_sel = paraborsa.get("selected") or {}
+    iy_daily = info_yatirim.get("daily") or {}
+    iy_tech = info_yatirim.get("technical") or {}
+    sources = [
+        {
+            "name": "BHT 收评文章",
+            "url": bht_url,
+            "status": "ok" if bloomberght.get("ok") else "fail",
+            "detail": bht_detail or (bloomberght.get("error") or ""),
+        },
+        {
+            "name": "BHT 实时行情 /piyasalar",
+            "url": "https://www.bloomberght.com/piyasalar",
+            "status": "ok" if live_quotes.get("ok") else "fail",
+            "detail": xu_detail or (live_quotes.get("error") or ""),
+        },
+        {
+            "name": "Paraborsa 市场评论",
+            "url": par_sel.get("url") or "https://www.paraborsa.com/",
+            "status": "ok" if par_sel.get("content") else "fail",
+            "detail": (par_sel.get("title", "")[:40] or paraborsa.get("error") or ""),
+        },
+        {
+            "name": "Info Yatırım 每日简报",
+            "url": iy_daily.get("url") or "https://infoyatirim.com/arastirma/gunluk-bulten",
+            "status": "ok" if iy_daily.get("content") else "fail",
+            "detail": (info_yatirim.get("reason") or ""),
+        },
+    ]
+    if iy_tech.get("content"):
+        sources.append({
+            "name": "Info Yatırım 技术简报",
+            "url": iy_tech.get("url") or "https://infoyatirim.com/arastirma/teknik-bulten",
+            "status": "ok",
+        })
+    title = f"土耳其股市收评 — {target_date.isoformat()}（{weekday_cn}）"
+    content = prepend_header(content, sources, title=title)
+
     output_file = output_dir / f"{target_date.isoformat()}_close_report_zh.md"
     output_file.write_text(content, encoding="utf-8")
     print(f"Close report written to: {output_file}")
@@ -222,19 +288,29 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
             "max_tokens": brief_cfg.get("max_tokens", 1200),
             "temperature": brief_cfg.get("temperature", 0.3),
         }
-        brief_output, brief_result = generate_with_validation(
+        brief_output, brief_result = generate_brief_with_retry(
             brief_prompt,
             brief_llm_cfg,
             lambda text: validate_brief(
                 text,
-        min_chars=brief_cfg.get("min_chars", 200),
-        max_chars=brief_cfg.get("max_chars", 600),
+                min_chars=brief_cfg.get("min_chars", 200),
+                max_chars=brief_cfg.get("max_chars", 600),
+            ),
+            fix_hint=(
+                "首行必须是【土耳其股市收评简报 — 日期（周x）】；"
+                "字段顺序固定：【指数】【汇率】【驱动】【个股】【板块】【信号】【操作】【风险】；"
+                "【个股】标签独占一行，其后 3–5 只个股，每只一行，格式「代码 涨跌/要点」；"
+                "禁止列表符号、Markdown、表格、Emoji；"
+                "篇幅 200–600 个汉字+中文标点（英文代码、数字不计入）；"
+                "只要换行、不要空行。"
             ),
         )
         brief_file = output_dir / f"{target_date.isoformat()}_close_report_brief_zh.md"
         if brief_output and brief_result.get("ok"):
             brief_file.write_text(brief_output, encoding="utf-8")
             print(f"Brief close report written to: {brief_file}")
+            if brief_result.get("warnings"):
+                print(f"Brief warnings (non-blocking): {brief_result['warnings']}", file=sys.stderr)
         else:
             print(f"Brief validation failed: {brief_result.get('errors', [])}", file=sys.stderr)
             if brief_output:

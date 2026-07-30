@@ -189,8 +189,7 @@ def fetch_live_quotes(
         except Exception:
             pass
 
-    now_tr_dt = datetime.now(TR_TZ)
-    now_tr = now_tr_dt.isoformat()
+    now_tr = datetime.now(TR_TZ).isoformat()
     try:
         resp = _SESSION.get(
             url,
@@ -200,24 +199,9 @@ def fetch_live_quotes(
         resp.raise_for_status()
         quotes = parse_piyasalar_html(resp.text)
         ok = bool(quotes.get("USD/TRY") or quotes.get("ALTIN/ONS") or quotes.get("BRENT"))
-        # Classify XU100 freshness so callers can decide whether to use it as
-        # an override for the close-review article's index numbers.
-        #   pre_market  : weekend/holiday, or TR weekday before 10:00 → page shows PRIOR close
-        #   intraday    : TR weekday 10:00–18:30                    → page shows TODAY's intraday
-        #   after_close : TR weekday after 18:30                     → page shows TODAY's close
-        weekday = now_tr_dt.weekday()  # 0=Mon ... 6=Sun
-        if weekday >= 5:
-            xu100_status = "pre_market"
-        elif now_tr_dt.hour < 10:
-            xu100_status = "pre_market"
-        elif now_tr_dt.hour < 18 or (now_tr_dt.hour == 18 and now_tr_dt.minute < 30):
-            xu100_status = "intraday"
-        else:
-            xu100_status = "after_close"
         payload = {
             "ok": ok,
             "fetched_at_tr": now_tr,
-            "xu100_status": xu100_status,
             "url": url,
             "quotes": quotes,
             "fact_cn": format_live_quotes_cn(quotes) if ok else "",

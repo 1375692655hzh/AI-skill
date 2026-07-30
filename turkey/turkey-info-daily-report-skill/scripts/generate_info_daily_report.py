@@ -18,6 +18,7 @@ from fetch_info_daily import fetch_info_daily
 from llm_runner import generate_with_validation
 from resolve_target_date import resolve_target_date, today_tr, is_trading_day_open
 from runtime_utils import configure_stdio, resolve_paths
+from source_header import prepend_header
 from validate_output import validate
 
 
@@ -128,6 +129,17 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
 
     if result.get("warnings"):
         print(f"Validation warnings: {result['warnings']}")
+
+    sources = [
+        {
+            "name": "Info Yatırım 每日简报",
+            "url": bulletin.get("url") or bulletin.get("fallback_url") or "https://infoyatirim.com/arastirma/gunluk-bulten",
+            "status": "ok" if bulletin.get("ok") else "fail",
+            "detail": bulletin.get("reason") or "",
+        },
+    ]
+    title = f"Info Yatırım 每日简报 — {target_date.isoformat()}（{weekday_cn}）"
+    report_content = prepend_header(report_content, sources, title=title)
 
     output_file = output_dir / f"{target_date.isoformat()}_info_daily_report_zh.md"
     output_file.write_text(report_content, encoding="utf-8")

@@ -20,6 +20,7 @@ from fetch_all_paraborsa import fetch_all_paraborsa
 from llm_runner import generate_with_validation
 from resolve_target_date import is_trading_day_open, resolve_target_date, today_tr
 from runtime_utils import configure_stdio, resolve_paths
+from source_header import prepend_header
 from validate_output import validate_report, validate_summary
 
 
@@ -208,6 +209,30 @@ def generate(
     validation = validate_report(report, min_articles=max(1, bundle.get("fetched_ok_count", 1) // 2))
     if validation.get("warnings"):
         print(f"Report warnings: {validation['warnings']}")
+
+    # 数据来源元数据：抓取统计 + 每篇文章 URL
+    disc_n = bundle.get("discovered_count", 0) or len(articles)
+    ok_n = bundle.get("fetched_ok_count", 0) or sum(1 for a in articles if a.get("content"))
+    sources = [
+        {
+            "name": "Paraborsa 抓取（WP REST）",
+            "url": "https://www.paraborsa.com/wp-json/wp/v2/posts",
+            "status": "ok" if bundle.get("ok") else "fail",
+            "detail": f"发现 {disc_n} 篇 / 抓取成功 {ok_n} 篇",
+        },
+    ]
+    for a in articles[:20]:  # cap to keep header readable
+        broker = a.get("broker_slug") or a.get("slug", "")
+        atype = a.get("article_type", "")
+        label = f"[{atype}] {broker}".strip(" []")
+        sources.append({
+            "name": f"Paraborsa {label}",
+            "url": a.get("url") or f"https://www.paraborsa.com/{a.get('slug','')}",
+            "status": "ok" if a.get("content") else "fail",
+            "detail": (a.get("title") or "")[:40],
+        })
+    title = f"Paraborsa 全券商综合观点 — {target_date.isoformat()}（{weekday_cn}）"
+    report = prepend_header(report, sources, title=title)
 
     output_file = output_dir / f"{target_date.isoformat()}_paraborsa_all_report_zh.md"
     output_file.write_text(report, encoding="utf-8")
