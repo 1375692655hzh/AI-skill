@@ -152,12 +152,20 @@ def main() -> int:
         else:
             print(f"Warning: AA TOP STORIES unavailable: {aa.get('error')}", file=sys.stderr)
 
-    news_limit = int(aa_cfg.get("news_limit", news_cfg.get("international_limit", 3)))
+    # limit<=0 = unlimited; one item per qualifying source headline.
+    news_limit = int(aa_cfg.get("news_limit", news_cfg.get("international_limit", 0)))
+    # News prefilter may need an LLM call to pick the top items when the
+    # raw wire has > max_items after rule-based filtering. Pass the same LLM
+    # config used for the main briefing; the picker only returns indices,
+    # never rewrites titles.
+    news_llm_cfg = config.get("llm")
     news_card = build_international_news_card(
         breaking,
         featured,
         aa_titles=aa_titles,
         limit=news_limit,
+        max_items=10,
+        llm_cfg=news_llm_cfg,
     )
     news_parts.append(news_card)
 
@@ -214,13 +222,21 @@ def main() -> int:
     output = re.sub(r"\n{2,}", "\n", output.replace("\r\n", "\n")).strip() + "\n"
 
     # 数据来源元数据：每个抓取源的 URL + 状态
-    cr = (closing.get("closing_review") or {}) if closing.get("ok") else {}
-    bht_url = cr.get("url") or "https://www.bloomberght.com/borsa/kapanis"
+    # fetch_closing_review returns a flat payload (ok/url/text/article_id),
+    # not the nested {closing_review: {...}} shape used by fetch_all_news.
+    cr = closing.get("closing_review") if isinstance(closing.get("closing_review"), dict) else {}
+    bht_url = (cr.get("url") or closing.get("url") or "https://www.bloomberght.com/borsa/kapanis")
     bht_detail = ""
-    if cr.get("article_id"):
-        bht_detail = f"文章 id={cr['article_id']}"
+    article_id = cr.get("article_id") or closing.get("article_id")
+    fetch_method = cr.get("fetch_method") or closing.get("fetch_method")
+    if article_id:
+        bht_detail = f"文章 id={article_id}"
+        if fetch_method:
+            bht_detail += f" via {fetch_method}"
     elif closing.get("ok"):
         bht_detail = "已抓取前一交易日收盘综述"
+        if fetch_method:
+            bht_detail += f" via {fetch_method}"
     xu = (live.get("quotes") or {}).get("XU100") or {}
     xu_status = live.get("xu100_status") or ""
     xu_detail = f"XU100={xu.get('last')} ({xu.get('pct')}%) [{xu_status}]" if xu else ""

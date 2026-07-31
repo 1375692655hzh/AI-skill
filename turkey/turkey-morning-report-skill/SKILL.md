@@ -21,6 +21,7 @@ The skill is designed to be invoked by any automation tool (Hermes Agent, OpenCl
 ## When to Use
 
 - **推荐运行时间：北京时间 14:30**（土耳其时间 09:30，开盘前 30 分钟）
+  - 早报用的是**前一交易日** BHT 收评；与收评 skill 共用 `bht_closing_fetcher`（`tum-piyasa-haberleri` → `/borsa` 相关区 → 小窗口 forecast）。北京 14:30 时昨收已在列表上，无需收评那套 00:10 主跑。
   - 此时 BloombergHT 已发布当日突发新闻和重点新闻
   - 前一天收盘总结已缓存（如有）
   - 为开盘前提供最新市场动态

@@ -48,10 +48,11 @@ Every source has a date guard. After fetching, the skill checks whether the fetc
 
 ## When to Use
 
-- **推荐运行时间：北京时间 23:30+**（土耳其时间 18:30+，收盘后）
-  - BloombergHT 详细收盘已发布
-  - Paraborsa 券商评论已发布
-  - Info Yatırım 公告已发布
+- **推荐运行时间（北京时间，仅交易日）**
+  - **主跑：00:05～00:15**（TR ≈ 19:05～19:15）。文章 CMS 戳常为 TR 18:30 / 北京 23:30，但 `/borsa`「İlgili Haberler」等模块可能更晚才挂上（观测约北京 23:50+），主跑应留足缓冲。
+  - **备选：23:55 主跑 + 00:15 失败重试 1 次**。仅当首轮为 `list_absent` / BHT 无文 / `gen_failed` 时重试；已成功写出当日文件则跳过（勿打幂等锁）。
+  - Skill 侧列表未上榜会**快速失败**（不海扫），依赖 runner 按上面做第二轮。
+  - 仅工作日触发；周末/假日由 `resolve_target_date` 回落到上一交易日，但 cron 仍建议直接 skip。
 - 适用于收盘后复盘、次日开盘前参考
 
 ## Inputs the Caller Must Provide

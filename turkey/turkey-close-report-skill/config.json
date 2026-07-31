@@ -19,6 +19,17 @@
     "max_tokens": 8000
   },
   "holidays": [],
+  "schedule": {
+    "timezone": "Asia/Shanghai",
+    "trading_days_only": true,
+    "primary_bj": "00:10",
+    "primary_window_bj": ["00:05", "00:15"],
+    "alternate_primary_bj": "23:55",
+    "retry_bj": "00:15",
+    "retry_once_on": ["list_absent", "bht_missing", "gen_failed"],
+    "skip_retry_if_output_exists": true,
+    "notes": "CMS stamp ~23:30 BJ; /borsa related rail may appear ~23:50+. Prefer primary 00:05-00:15; or 23:55 + one retry at 00:15."
+  },
   "brief": {
     "enabled": true,
     "template_path": "templates/close_report_brief_template.txt",

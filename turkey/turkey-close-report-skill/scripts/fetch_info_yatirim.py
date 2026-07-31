@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Fetch Info Yatirim daily bulletin and technical bulletin."""
+"""Fetch Info Yatirim daily bulletin and technical bulletin.
+
+Soft dependency for the close report: fail fast (seconds–tens of seconds),
+never burn minutes on retries when the site is down.
+"""
 from __future__ import annotations
 
 import json
@@ -18,12 +22,12 @@ from urllib3.util.retry import Retry
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-# Shared session with retry/backoff. Info Yatirim's TLS stack frequently emits
-# SSL EOF / 5xx under load; without retries the whole skill gen_fails.
+# Soft source: at most one retry (2 attempts total). Listing/landing pages use
+# a short timeout; CDN body may use a slightly longer one.
 _SESSION = requests.Session()
 _RETRY = Retry(
-    total=4,
-    backoff_factor=1.5,
+    total=1,
+    backoff_factor=0.5,
     status_forcelist=(429, 500, 502, 503, 504),
     allowed_methods=frozenset({"GET", "HEAD"}),
     raise_on_status=False,
@@ -32,13 +36,48 @@ _SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
 _SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
 _SESSION.headers.update(HEADERS)
 
+LIST_TIMEOUT = 12.0
+BODY_TIMEOUT = 20.0
+# Abandon a bulletin source after this many hard failures/timeouts.
+MAX_SOURCE_FAILURES = 2
 
-def _get(url: str, *, timeout: float = 40.0) -> Optional[requests.Response]:
-    """GET with retry/backoff and SSL tolerance. Returns None on hard failure."""
+
+class _SourceBudget:
+    """Track consecutive failures for one Info Yatırım bulletin stream."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.failures = 0
+        self.abandoned = False
+        self.reason = ""
+
+    def record_fail(self, reason: str) -> None:
+        self.failures += 1
+        self.reason = reason
+        if self.failures >= MAX_SOURCE_FAILURES:
+            self.abandoned = True
+            print(
+                f"Warning: Info Yatirim {self.name} abandoned after "
+                f"{self.failures} failures (last={reason})",
+                file=sys.stderr,
+            )
+
+
+def _get(
+    url: str,
+    *,
+    timeout: float = LIST_TIMEOUT,
+    budget: Optional[_SourceBudget] = None,
+) -> Optional[requests.Response]:
+    """GET with short timeout. Returns None on hard failure; updates budget."""
+    if budget and budget.abandoned:
+        return None
     try:
         return _SESSION.get(url, timeout=timeout)
     except (requests.RequestException, OSError) as exc:
         print(f"Warning: Info Yatirim GET failed for {url}: {exc}", file=sys.stderr)
+        if budget:
+            budget.record_fail(f"timeout_or_error:{type(exc).__name__}")
         return None
 
 
@@ -52,14 +91,20 @@ def _slug_for_date(d: date) -> str:
     return f"{d.day:02d}{d.month:02d}{d.year}"
 
 
-def _find_archive_link(landing_url: str, target_date: date) -> Optional[str]:
+def _find_archive_link(
+    landing_url: str,
+    target_date: date,
+    budget: _SourceBudget,
+) -> Optional[str]:
     """Find the per-day archive link from the landing page pagination."""
     needle = f"bulten-{_slug_for_date(target_date)}"
     for page in range(1, 4):
-        url = f"{landing_url}?page={page}" if page > 1 else landing_url
-        resp = _get(url)
-        if resp is None:
+        if budget.abandoned:
             return None
+        url = f"{landing_url}?page={page}" if page > 1 else landing_url
+        resp = _get(url, timeout=LIST_TIMEOUT, budget=budget)
+        if resp is None:
+            continue
         resp.encoding = "utf-8"
 
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -70,23 +115,33 @@ def _find_archive_link(landing_url: str, target_date: date) -> Optional[str]:
     return None
 
 
-def _find_bulletin_uuid(landing_url: str, target_date: date) -> tuple[Optional[str], Optional[str]]:
+def _find_bulletin_uuid(
+    landing_url: str,
+    target_date: date,
+    budget: _SourceBudget,
+) -> tuple[Optional[str], Optional[str]]:
     """
     Find the bulletin UUID and the archive page URL/label.
     Returns (uuid, archive_label_or_url).
     """
-    archive_url = _find_archive_link(landing_url, target_date)
+    if budget.abandoned:
+        return None, None
+
+    archive_url = _find_archive_link(landing_url, target_date, budget)
     archive_label = None
-    if archive_url:
-        resp = _get(archive_url)
+    if archive_url and not budget.abandoned:
+        resp = _get(archive_url, timeout=LIST_TIMEOUT, budget=budget)
         if resp is not None:
             resp.encoding = "utf-8"
             archive_label = resp.text
             for m in re.finditer(r"/Content/Bulletin/([0-9a-fA-F-]{36})\.html", resp.text):
                 return m.group(1), archive_label
 
+    if budget.abandoned:
+        return None, None
+
     # Fallback: latest from landing page
-    resp = _get(landing_url)
+    resp = _get(landing_url, timeout=LIST_TIMEOUT, budget=budget)
     if resp is None:
         return None, None
     resp.encoding = "utf-8"
@@ -106,9 +161,13 @@ def _find_bulletin_uuid(landing_url: str, target_date: date) -> tuple[Optional[s
     return None, archive_label
 
 
-def fetch_bulletin_content(uuid: str, archive_label: Optional[str] = None) -> str:
+def fetch_bulletin_content(
+    uuid: str,
+    archive_label: Optional[str] = None,
+    budget: Optional[_SourceBudget] = None,
+) -> str:
     url = f"https://cdn.infoyatirim.com/Content/Bulletin/{uuid}.html"
-    resp = _get(url)
+    resp = _get(url, timeout=BODY_TIMEOUT, budget=budget)
     if resp is None:
         return ""
     resp.encoding = "utf-8"
@@ -116,11 +175,14 @@ def fetch_bulletin_content(uuid: str, archive_label: Optional[str] = None) -> st
     for s in soup(["script", "style", "nav", "footer"]):
         s.decompose()
     body = soup.get_text("\n", strip=True)
-    # Prepend a clean date label from the archive page for date verification
     label = ""
     if archive_label:
-        # Extract the title-like date string if present
-        m = re.search(r"(\d{1,2}\s+[a-zA-ZğüşöçıİĞÜŞÖÇ]+\s+\d{4})\s+Teknik Bülteni|(\d{1,2}\s+[a-zA-ZğüşöçıİĞÜŞÖÇ]+\s+\d{4})\s+Günlük Bülteni", archive_label, re.I)
+        m = re.search(
+            r"(\d{1,2}\s+[a-zA-ZğüşöçıİĞÜŞÖÇ]+\s+\d{4})\s+Teknik Bülteni|"
+            r"(\d{1,2}\s+[a-zA-ZğüşöçıİĞÜŞÖÇ]+\s+\d{4})\s+Günlük Bülteni",
+            archive_label,
+            re.I,
+        )
         if m:
             label = m.group(0)
     text = f"{label}\n{body}" if label else body
@@ -134,24 +196,64 @@ def fetch_info_yatirim(target_date: date, cache_dir: Path) -> dict:
         if cached.get("daily", {}).get("content") and cached.get("technical", {}).get("content"):
             return cached
 
-    daily_uuid, daily_label = _find_bulletin_uuid(LANDING_PAGES["daily"], target_date)
-    technical_uuid, technical_label = _find_bulletin_uuid(LANDING_PAGES["technical"], target_date)
+    daily_budget = _SourceBudget("daily")
+    daily_uuid, daily_label = _find_bulletin_uuid(
+        LANDING_PAGES["daily"], target_date, daily_budget
+    )
+    daily_content = ""
+    if daily_uuid and not daily_budget.abandoned:
+        daily_content = fetch_bulletin_content(daily_uuid, daily_label, daily_budget)
 
-    daily_content = fetch_bulletin_content(daily_uuid, daily_label) if daily_uuid else ""
-    technical_content = fetch_bulletin_content(technical_uuid, technical_label) if technical_uuid else ""
+    # If daily already failed hard, skip technical — both are optional opinion
+    # sources and burning another minute on the same dead host is wasteful.
+    technical_uuid: Optional[str] = None
+    technical_label: Optional[str] = None
+    technical_content = ""
+    technical_skip_reason = ""
+    if daily_budget.abandoned or (not daily_uuid and daily_budget.failures >= MAX_SOURCE_FAILURES):
+        technical_skip_reason = f"skipped_after_daily_fail:{daily_budget.reason or 'no_uuid'}"
+        print(
+            f"Warning: Info Yatirim technical {technical_skip_reason}",
+            file=sys.stderr,
+        )
+    else:
+        technical_budget = _SourceBudget("technical")
+        technical_uuid, technical_label = _find_bulletin_uuid(
+            LANDING_PAGES["technical"], target_date, technical_budget
+        )
+        if technical_uuid and not technical_budget.abandoned:
+            technical_content = fetch_bulletin_content(
+                technical_uuid, technical_label, technical_budget
+            )
 
     result = {
-        "ok": bool(daily_uuid) or bool(technical_uuid),
+        "ok": bool(daily_content) or bool(technical_content),
         "target_date": target_date.isoformat(),
         "daily": {
             "uuid": daily_uuid or "",
-            "url": f"https://cdn.infoyatirim.com/Content/Bulletin/{daily_uuid}.html" if daily_uuid else "",
+            "url": (
+                f"https://cdn.infoyatirim.com/Content/Bulletin/{daily_uuid}.html"
+                if daily_uuid
+                else ""
+            ),
             "content": daily_content,
+            "status": "ok" if daily_content else "fail",
+            "detail": "" if daily_content else (daily_budget.reason or "not_found"),
         },
         "technical": {
             "uuid": technical_uuid or "",
-            "url": f"https://cdn.infoyatirim.com/Content/Bulletin/{technical_uuid}.html" if technical_uuid else "",
+            "url": (
+                f"https://cdn.infoyatirim.com/Content/Bulletin/{technical_uuid}.html"
+                if technical_uuid
+                else ""
+            ),
             "content": technical_content,
+            "status": "ok" if technical_content else "fail",
+            "detail": (
+                technical_skip_reason
+                if technical_skip_reason
+                else ("" if technical_content else "not_found")
+            ),
         },
     }
 

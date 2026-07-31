@@ -104,6 +104,50 @@ def _slots_are_consecutive_lines(body: str, slots: tuple[str, ...]) -> bool:
     return True
 
 
+def _num_core(fp: str) -> str | None:
+    """Normalize a numeric token for float-equivalence comparison.
+
+    Strips '%' and leading '-', returns a canonical decimal string so that
+    '13458.10' and '13458.1' compare equal. Returns None if not a plain number.
+    """
+    bare = fp.rstrip("%")
+    if bare.startswith("-"):
+        bare = bare[1:]
+    if not re.fullmatch(r"\d+(?:\.\d+)?", bare):
+        return None
+    try:
+        return f"{float(bare):.10g}"
+    except ValueError:
+        return None
+
+
+def _fp_in_source(fp: str, src_fps: set[str]) -> bool:
+    """True if fingerprint token appears in source with %/sign/trailing-zero tolerance."""
+    if fp in src_fps:
+        return True
+    variants = {fp}
+    bare = fp.rstrip("%")
+    if bare != fp:
+        variants.add(bare)
+    if fp.startswith("-"):
+        variants.add(fp[1:])
+        variants.add(fp[1:].rstrip("%"))
+    else:
+        variants.add("-" + fp)
+        variants.add("-" + bare)
+    if any(v in src_fps for v in variants):
+        return True
+    # Float-equivalence: 13458.10 ↔ 13458.1
+    core = _num_core(fp)
+    if core is None:
+        return False
+    for s in src_fps:
+        sc = _num_core(s)
+        if sc is not None and sc == core:
+            return True
+    return False
+
+
 def _extract_numbers(s: str) -> set[str]:
     """Fingerprint all numeric tokens in source text for provenance check.
 
@@ -138,8 +182,10 @@ def _extract_numbers(s: str) -> set[str]:
         s = s[: m.start()] + " " * (m.end() - m.start()) + s[m.end() :]
     # Prices / closes with optional decimal: 13515.54 / 47.40 / 4016 / 63996
     # Consume the whole numeric run so "47.40" is one token, not "47" + "40".
+    # Allow 1-digit integer part so percentage-like cells stored as "0,57" or
+    # "9,40" without a % sign (common in tabular sources) are not skipped.
     # Lookarounds (not \b) so Chinese prefixes don't split the number.
-    for m in re.finditer(r"(?<![\d.])\d{2,5}(?:[.,]\d{1,4})?(?![\d.])", s):
+    for m in re.finditer(r"(?<![\d.])\d{1,5}(?:[.,]\d{1,4})?(?![\d.])", s):
         fps.add(m.group(0).replace(",", "."))
     return fps
 
@@ -242,6 +288,18 @@ def validate(text: str, *, source_facts: str | None = None) -> dict:
             if re.search(r"成交[^\n]*涨幅|成交[^\n]*跌幅", stocks):
                 errors.append("[关键个股异动] 成交额与涨跌幅应换行分行，不要挤同一行.")
 
+    # 行业板块表现 must be fully translated — no raw Turkish words should leak.
+    sectors_body = _extract_section(text, "行业板块表现")
+    if sectors_body:
+        tr_hits = re.findall(r"[a-zçğıöşü]{3,}", sectors_body)
+        stop_en = {"the", "and", "for", "with"}
+        tr_hits = [t for t in tr_hits if t not in stop_en]
+        if tr_hits:
+            errors.append(
+                f"[行业板块表现] untranslated Turkish words leaked: {sorted(set(tr_hits))}. "
+                "Translate every sector name to Chinese."
+            )
+
     # 大盘概况 must contain a concrete BIST 100 close (5-digit number like 13xxx or 14xxx)
     overview = _extract_section(text, "大盘概况")
     if overview and not re.search(r"1[3-5]\s?\d{3}([.,]\d{1,2})?", overview):
@@ -292,9 +350,14 @@ def validate(text: str, *, source_facts: str | None = None) -> dict:
             if not body:
                 continue
             out_fps = _extract_numbers(body) - ignore
-            # Strict membership: number must appear verbatim in source fingerprint.
-            # (Substring matching is too loose — "99999" would slip through via "99".)
-            suspicious = sorted(fp for fp in out_fps if fp not in src_fps)
+            # Membership with % / sign / trailing-zero transparency.
+            # e.g. source "13458.1" matches output "13458.10"; source "-1.53%"
+            # matches output "下跌1.53%" (bare 1.53).
+            suspicious = []
+            for fp in sorted(out_fps):
+                if _fp_in_source(fp, src_fps):
+                    continue
+                suspicious.append(fp)
             if suspicious:
                 errors.append(
                     f"[{title}] numbers not found in BHT source: {suspicious[:8]}. "

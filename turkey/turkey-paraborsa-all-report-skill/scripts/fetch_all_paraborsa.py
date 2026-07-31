@@ -115,8 +115,23 @@ def fetch_all_paraborsa(
     )
     articles: list[dict] = []
     ok_count = 0
+    # Abort the long broker walk after consecutive hard network failures so a
+    # dead Paraborsa origin cannot burn the whole runner timeout.
+    consecutive_net_fails = 0
+    max_consecutive_net_fails = 4
     for idx, meta in enumerate(discovered):
-        content, status = fetch_post_by_slug(meta["slug"], retries=retry_on_429, base_delay=delay_seconds)
+        if consecutive_net_fails >= max_consecutive_net_fails:
+            print(
+                f"Warning: Paraborsa abort after {consecutive_net_fails} consecutive "
+                f"network failures (remaining {len(discovered) - idx} slugs skipped)",
+                file=sys.stderr,
+            )
+            break
+        content, status = fetch_post_by_slug(meta["slug"], retries=min(retry_on_429, 2), base_delay=delay_seconds)
+        if status.startswith("network_error") or status.startswith("status_5") or status == "status_429":
+            consecutive_net_fails += 1
+        else:
+            consecutive_net_fails = 0
         entry = {
             **meta,
             "content": content or "",

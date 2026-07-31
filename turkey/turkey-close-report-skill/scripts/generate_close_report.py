@@ -195,9 +195,21 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     llm_cfg = config["llm"]
     # Build the BHT fact card once and pass it to the validator as the
     # data-provenance fingerprint, so fabricated numbers/percentages are caught.
-    source_facts = build_bht_fact_sheet(
-        bloomberght.get("closing_review", {}).get("text", "")
-    ) if bloomberght.get("ok") else None
+    # Must use the same live XU100 index_override as the prompt, otherwise the
+    # model writes live numbers while the validator fingerprints the article.
+    index_override = None
+    if live_quotes and live_quotes.get("quotes", {}).get("XU100"):
+        if live_quotes.get("xu100_status") in ("intraday", "after_close"):
+            xu = live_quotes["quotes"]["XU100"]
+            index_override = {"last": xu.get("last"), "pct": xu.get("pct")}
+    source_facts = (
+        build_bht_fact_sheet(
+            bloomberght.get("closing_review", {}).get("text", ""),
+            index_override=index_override,
+        )
+        if bloomberght.get("ok")
+        else None
+    )
     validate_with_source = (
         (lambda text: validate(text, source_facts=source_facts))
         if source_facts

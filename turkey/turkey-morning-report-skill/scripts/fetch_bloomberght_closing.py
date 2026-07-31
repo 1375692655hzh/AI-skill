@@ -255,14 +255,17 @@ def fetch_all_news(
     print("Fetching featured news (Öne Çıkan Haberler)...", file=sys.stderr)
     featured = fetch_featured_news()
 
+    # Prefer nested closing_review dict for downstream; fall back to flat.
+    closing_nested = closing.get("closing_review") if isinstance(closing.get("closing_review"), dict) else closing
     result = {
-        "ok": True,
+        "ok": bool(closing.get("ok")),
         "target_date": target_date.isoformat(),
         "source": "bloomberght",
-        "closing_review": closing,
+        "closing_review": closing_nested,
         "breaking_news": breaking,
         "featured_news": featured,
         "total_items": len(breaking) + len(featured) + (1 if closing.get("ok") else 0),
+        "error": None if closing.get("ok") else (closing.get("error") or "closing review missing"),
     }
     cache_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
@@ -287,7 +290,10 @@ def fetch_closing_review(
             "text": None,
             "source": "bloomberght",
         }
-    return _fetch_closing_review(
+    # Default use_project_fetcher=False: morning skill is self-contained and
+    # shares bht_closing_fetcher with the close-report skill (list_page →
+    # borsa_related → small forecast). Project delegation is opt-in only.
+    payload = _fetch_closing_review(
         target_date=target_date,
         cache_dir=cache_dir,
         workdir=workdir,
@@ -296,8 +302,24 @@ def fetch_closing_review(
             "list_page_url",
             f"{BASE}/tum-piyasa-haberleri",
         ),
-        use_project_fetcher=closing_cfg.get("use_project_fetcher", True),
+        use_project_fetcher=closing_cfg.get("use_project_fetcher", False),
     )
+    # Expose both flat fields (legacy callers) and nested closing_review
+    # (fetch_all_news / source headers).
+    if isinstance(payload, dict) and "closing_review" not in payload:
+        payload = {
+            **payload,
+            "closing_review": {
+                "ok": payload.get("ok"),
+                "title": payload.get("title"),
+                "url": payload.get("url"),
+                "text": payload.get("text"),
+                "fetch_method": payload.get("fetch_method"),
+                "article_id": payload.get("article_id"),
+                "error": payload.get("error"),
+            },
+        }
+    return payload
 
 
 if __name__ == "__main__":

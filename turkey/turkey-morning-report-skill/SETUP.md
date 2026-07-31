@@ -132,7 +132,7 @@ turkey-morning-report-skill/
 → 脚本已内置 UTF-8 修复；若仍有问题，执行 `$env:PYTHONIOENCODING = "utf-8"`。
 
 **Q: BloombergHT 抓取失败**
-→ 检查网络；北京时间 14:30 后数据更完整。
+→ 检查网络；北京时间 14:30 后数据更完整。昨收 BHT 与收评 skill 共用抓取器，14:30 时前一交易日收评应已在列表中。
 
 **Q: 今天是土耳其假期，没有生成**
 → 正常行为；可用 `--force-date` 指定前一交易日。

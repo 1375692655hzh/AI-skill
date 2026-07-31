@@ -188,14 +188,28 @@ def validate(text: str) -> dict:
             if re.search(r"成交[^\n]*涨幅|成交[^\n]*跌幅", stocks):
                 errors.append("[关键个股] 成交额与涨跌幅应换行分行，不要挤同一行.")
 
+    # 行业板块表现 must be fully translated — no raw Turkish words should leak.
+    sectors_body = _extract_section(text, "行业板块表现")
+    if sectors_body:
+        # Match lowercase ascii runs of length >=3. Chinese chars are NOT
+        # ascii so they naturally bound the match — but we must NOT use \w
+        # for the lookaround because Python's re.UNICODE makes Chinese count
+        # as \w, which would suppress matches at the CN/TR boundary.
+        tr_hits = re.findall(r"[a-zçğıöşü]{3,}", sectors_body)
+        stop_en = {"the", "and", "for", "with"}
+        tr_hits = [t for t in tr_hits if t not in stop_en]
+        if tr_hits:
+            errors.append(
+                f"[行业板块表现] untranslated Turkish words leaked: {sorted(set(tr_hits))}. "
+                "Translate every sector name to Chinese."
+            )
+
     intl = _extract_section(text, "国际新闻")
     if intl:
         intl_lines = [ln.strip() for ln in intl.splitlines() if ln.strip()]
-        if len(intl_lines) < 2:
-            errors.append("[国际新闻] need 2–3 lines (one news item per line).")
-        elif len(intl_lines) > 4:
-            warnings.append("[国际新闻] more than 3–4 lines; keep 2–3 news items, one per line.")
-        # Reject one giant paragraph (no line breaks between items)
+        # No count cap or floor: write as many or as few key items as the
+        # source justifies. Only enforce the per-line-one-item format.
+        # Reject one giant paragraph (no line breaks between items).
         if len(intl_lines) == 1 and len(intl_lines[0]) > 120:
             errors.append("[国际新闻] must use line breaks: one news item per line.")
 

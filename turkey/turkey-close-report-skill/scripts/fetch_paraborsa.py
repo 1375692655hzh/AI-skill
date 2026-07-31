@@ -18,13 +18,12 @@ from urllib3.util.retry import Retry
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-# Shared session with retry/backoff. Paraborsa sits behind Cloudflare and
-# intermittently emits 5xx / drops TLS; without retries the close report
-# silently falls back to "no commentary found".
+# Soft source: short timeout + one retry. Prefer fail-fast over burning minutes
+# when Cloudflare/TLS flaps — close report treats Paraborsa as optional.
 _SESSION = requests.Session()
 _RETRY = Retry(
-    total=4,
-    backoff_factor=1.5,
+    total=1,
+    backoff_factor=0.5,
     status_forcelist=(429, 500, 502, 503, 504),
     allowed_methods=frozenset({"GET", "HEAD"}),
     raise_on_status=False,
@@ -33,13 +32,26 @@ _SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
 _SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
 _SESSION.headers.update(HEADERS)
 
+DEFAULT_TIMEOUT = 12.0
+BODY_TIMEOUT = 20.0
+MAX_SOURCE_FAILURES = 2
+_source_failures = 0
 
-def _get(url: str, *, timeout: float = 40.0) -> Optional[requests.Response]:
-    """GET with retry/backoff and SSL tolerance. Returns None on hard failure."""
+
+def _get(url: str, *, timeout: float = DEFAULT_TIMEOUT) -> Optional[requests.Response]:
+    """GET with short timeout. Abandons further calls after MAX_SOURCE_FAILURES."""
+    global _source_failures
+    if _source_failures >= MAX_SOURCE_FAILURES:
+        return None
     try:
         return _SESSION.get(url, timeout=timeout)
     except (requests.RequestException, OSError) as exc:
-        print(f"Warning: Paraborsa GET failed for {url}: {exc}", file=sys.stderr)
+        _source_failures += 1
+        print(
+            f"Warning: Paraborsa GET failed for {url}: {exc} "
+            f"(failures={_source_failures}/{MAX_SOURCE_FAILURES})",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -117,7 +129,7 @@ def fetch_homepage_links(target_date: date) -> List[dict]:
 
 
 def extract_article_content(url: str) -> str:
-    resp = _get(url)
+    resp = _get(url, timeout=BODY_TIMEOUT)
     if resp is None:
         return ""
     resp.encoding = "utf-8"
@@ -135,6 +147,9 @@ def extract_article_content(url: str) -> str:
 
 
 def fetch_paraborsa(target_date: date, cache_dir: Path) -> dict:
+    global _source_failures
+    _source_failures = 0  # reset per invocation
+
     cache_file = cache_dir / f"paraborsa_{target_date.isoformat()}.json"
     if cache_file.exists():
         return json.loads(cache_file.read_text(encoding="utf-8"))

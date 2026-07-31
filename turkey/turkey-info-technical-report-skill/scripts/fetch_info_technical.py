@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Fetch Info Yatirim technical bulletin (Teknik Bülten)."""
+"""Fetch Info Yatirim technical bulletin (Teknik Bülten).
+
+Fail-fast on TLS/timeout: Retry(total=1) + short timeouts + abandon after
+MAX_FAILURES hard errors.
+"""
 from __future__ import annotations
 
 import json
@@ -20,12 +24,14 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 LANDING_URL = "https://infoyatirim.com/arastirma/teknik-bulten"
 FALLBACK_URL = LANDING_URL
 
-# Shared session with retry/backoff. Info Yatirim's TLS stack frequently emits
-# SSL EOF / 5xx under load; without retries the whole skill gen_fails.
+LIST_TIMEOUT = 12.0
+BODY_TIMEOUT = 20.0
+MAX_FAILURES = 2
+
 _SESSION = requests.Session()
 _RETRY = Retry(
-    total=4,
-    backoff_factor=1.5,
+    total=1,
+    backoff_factor=0.5,
     status_forcelist=(429, 500, 502, 503, 504),
     allowed_methods=frozenset({"GET", "HEAD"}),
     raise_on_status=False,
@@ -34,13 +40,24 @@ _SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
 _SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
 _SESSION.headers.update(HEADERS)
 
+_failures = 0
+_last_reason = ""
 
-def _get(url: str, *, timeout: float = 40.0) -> Optional[requests.Response]:
-    """GET with retry/backoff and SSL tolerance. Returns None on hard failure."""
+
+def _get(url: str, *, timeout: float = LIST_TIMEOUT) -> Optional[requests.Response]:
+    global _failures, _last_reason
+    if _failures >= MAX_FAILURES:
+        return None
     try:
         return _SESSION.get(url, timeout=timeout)
     except (requests.RequestException, OSError) as exc:
-        print(f"Warning: Info Yatirim GET failed for {url}: {exc}", file=sys.stderr)
+        _failures += 1
+        _last_reason = f"timeout_or_error:{type(exc).__name__}"
+        print(
+            f"Warning: Info Yatirim GET failed for {url}: {exc} "
+            f"(failures={_failures}/{MAX_FAILURES})",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -51,10 +68,12 @@ def _slug_for_date(d: date) -> str:
 def _find_archive_link(target_date: date) -> Optional[str]:
     needle = f"teknik-bulten-{_slug_for_date(target_date)}"
     for page in range(1, 4):
-        url = f"{LANDING_URL}?page={page}" if page > 1 else LANDING_URL
-        resp = _get(url)
-        if resp is None:
+        if _failures >= MAX_FAILURES:
             return None
+        url = f"{LANDING_URL}?page={page}" if page > 1 else LANDING_URL
+        resp = _get(url, timeout=LIST_TIMEOUT)
+        if resp is None:
+            continue
         resp.encoding = "utf-8"
 
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -68,15 +87,18 @@ def _find_archive_link(target_date: date) -> Optional[str]:
 def _find_bulletin_uuid(target_date: date) -> tuple[Optional[str], Optional[str]]:
     archive_url = _find_archive_link(target_date)
     archive_label = None
-    if archive_url:
-        resp = _get(archive_url)
+    if archive_url and _failures < MAX_FAILURES:
+        resp = _get(archive_url, timeout=LIST_TIMEOUT)
         if resp is not None:
             resp.encoding = "utf-8"
             archive_label = resp.text
             for m in re.finditer(r"/Content/Bulletin/([0-9a-fA-F-]{36})\.html", resp.text):
                 return m.group(1), archive_label
 
-    resp = _get(LANDING_URL)
+    if _failures >= MAX_FAILURES:
+        return None, None
+
+    resp = _get(LANDING_URL, timeout=LIST_TIMEOUT)
     if resp is None:
         return None, None
     resp.encoding = "utf-8"
@@ -98,7 +120,7 @@ def _find_bulletin_uuid(target_date: date) -> tuple[Optional[str], Optional[str]
 
 def fetch_bulletin_content(uuid: str, archive_label: Optional[str] = None) -> str:
     url = f"https://cdn.infoyatirim.com/Content/Bulletin/{uuid}.html"
-    resp = _get(url)
+    resp = _get(url, timeout=BODY_TIMEOUT)
     if resp is None:
         return ""
     resp.encoding = "utf-8"
@@ -126,6 +148,10 @@ def fetch_info_technical(
     workdir: Optional[Path] = None,
     use_project_fetcher: bool = False,
 ) -> dict:
+    global _failures, _last_reason
+    _failures = 0
+    _last_reason = ""
+
     cache_file = cache_dir / f"info_technical_{target_date.isoformat()}.json"
     if cache_file.exists():
         cached = json.loads(cache_file.read_text(encoding="utf-8"))
@@ -144,9 +170,10 @@ def fetch_info_technical(
     uuid, archive_label = _find_bulletin_uuid(target_date)
     content = fetch_bulletin_content(uuid, archive_label) if uuid else ""
 
+    reason = "ok" if uuid and content else (_last_reason or "not_found")
     result = {
         "ok": bool(uuid and content),
-        "reason": "ok" if uuid and content else "not_found",
+        "reason": reason,
         "target_date": target_date.isoformat(),
         "uuid": uuid or "",
         "url": f"https://cdn.infoyatirim.com/Content/Bulletin/{uuid}.html" if uuid else "",

@@ -69,9 +69,11 @@ def _session() -> requests.Session:
     s.headers.update(HEADERS)
     # AA is the highest-failure task (66.7%); add retry/backoff so a single
     # transient 5xx / TLS flap doesn't gen_fail the whole briefing.
+    # Bound retries: AA is flaky but total=4×long timeout previously burned
+    # multi-minute wall time before gen_fail. Two attempts is enough for flaps.
     retry = Retry(
-        total=4,
-        backoff_factor=1.5,
+        total=2,
+        backoff_factor=1.0,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset({"GET", "HEAD"}),
         raise_on_status=False,

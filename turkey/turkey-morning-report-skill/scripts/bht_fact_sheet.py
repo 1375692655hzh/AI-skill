@@ -42,6 +42,7 @@ SECTOR_CN = {
     "petrol": "石油",
     # consumer / industrial
     "gıda": "食品",
+    "gida": "食品",  # ascii form after ı→i normalization
     "içecek": "饮料",
     "tekstil": "纺织",
     "otomotiv": "汽车",
@@ -54,6 +55,21 @@ SECTOR_CN = {
     "orman": "林业",
     "kağıt": "造纸",
     "savunma": "国防",
+    # services / misc consumer
+    "spor": "体育",
+    "medya": "传媒",
+    "perakende": "零售",
+    "lojistik": "物流",
+    "tarım": "农业",
+    "balıkçılık": "渔业",
+    "tekstil deri": "纺织皮革",
+    "deri": "皮革",
+    "kamu": "公用事业",
+    "hizmet": "服务",
+    "demirÇelik": "钢铁",
+    "ana sanayi": "工业",
+    "esya": "制品",
+    "makina": "机械",
 }
 
 

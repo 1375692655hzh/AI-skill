@@ -27,7 +27,7 @@
       "aa_morning": {
         "enabled": true,
         "skill_dir": "../turkey-aa-morning-briefing-skill",
-        "news_limit": 3
+        "news_limit": 0
       },
       "web_search": {
         "enabled": true,

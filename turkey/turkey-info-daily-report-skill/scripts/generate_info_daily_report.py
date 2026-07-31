@@ -116,7 +116,15 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
         return prompt_file
 
     llm_cfg = config["llm"]
-    report_content, result = generate_with_validation(prompt, llm_cfg, validate)
+    # Build a numeric fingerprint from the bulletin so the validator can catch
+    # fabricated prices / percentages / points in the fact sections.
+    source_facts = content if bulletin.get("ok") else None
+    validate_with_source = (
+        (lambda text: validate(text, source_facts=source_facts))
+        if source_facts
+        else validate
+    )
+    report_content, result = generate_with_validation(prompt, llm_cfg, validate_with_source)
     if report_content is None or not result.get("ok"):
         if report_content:
             raw_output = cache_dir / f"daily_raw_output_{target_date.isoformat()}.txt"

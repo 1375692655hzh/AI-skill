@@ -9,18 +9,21 @@ This skill uses the following sources. All are configurable in `config.json`.
 | Source | BloombergHT |
 | Article | Piyasalarda günün özeti (Detailed closing summary) |
 | Typical publish time (TR) | ~18:30 |
-| Typical publish time (Beijing) | ~23:30 |
+| Article CMS stamp (Beijing) | ~23:30（详情页时间戳，≠ 列表可见时间） |
+| List / `/borsa` related rail | May appear later (~23:50+ BJ). Morning cron at BJ 14:30 uses **previous** trading day — article is already on `tum-piyasa-haberleri`. |
+| Shared fetcher | Same `bht_closing_fetcher.py` as close-report skill (byte-identical). Discovery: list_page → borsa_related → date_to_id / small forecast. |
 | RSS | `https://www.bloomberght.com/rss` |
 | Borsa section | `https://www.bloomberght.com/borsa` |
 | Article title patterns | `Piyasalarda günün özeti: {date} ...` or `Piyasa özeti: {date} ...` |
 | Article URL example | `https://www.bloomberght.com/piyasalarda-gunun-ozeti-10-temmuz-2026-bist-100-de-degisimler-ve-doviz-fiyatlari-pkh-3782616` |
 
-Fetcher strategy:
-1. Download RSS feed.
-2. Find an item whose title matches the patterns and whose date matches the resolved target date.
-3. If not found, run a web search for the title + date and extract the article URL.
-4. Extract the article body using a generic HTML reader (requests + BeautifulSoup or an MCP reader).
-5. Cache raw HTML and extracted text.
+Fetcher strategy (`scripts/bht_closing_fetcher.py`, shared with close-report):
+1. Cache / optional manifest.
+2. `tum-piyasa-haberleri` list_page (date window, newest→oldest; no infinite scroll).
+3. `/borsa` İlgili Haberler related rail.
+4. Optional project fetcher if enabled.
+5. Beyond list window only: date_to_id → small forecast (±250) → short RSS scan.
+6. Cache under `.cache/turkey-morning-report/bloomberght_closing_{date}.json`.
 
 **BHT-only factual sections（前一交易日收盘）：** `【关键个股】`、`【行业板块表现】`。成交额写「亿里拉」，不加分析。
 
