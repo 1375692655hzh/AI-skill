@@ -1,7 +1,7 @@
 ---
 name: turkey-close-report-skill
 description: Use when generating a Turkish stock market close-of-day report in Chinese, based on the same-day BloombergHT closing review, Paraborsa broker commentary, and Info Yatırım bulletins.
-version: 1.2.0
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -25,7 +25,8 @@ Unlike the morning report, the close report:
 
 | Source | Role | Content |
 |--------|------|---------|
-| BloombergHT Piyasalarda günün özeti | **Primary / 事实唯一来源** | BIST 100 close, sectors, stocks, FX, commodities, volume |
+| BloombergHT `/borsa/` live page | **Primary for current BIST snapshot** | XU100, current gainers/losers, turnover leaders |
+| BloombergHT Piyasalarda günün özeti | **Primary for remaining close facts** | Intraday high/low, sectors, FX, commodities |
 | Paraborsa broker commentary | Supplementary（仅观点节） | Broker views, technical levels, stock picks |
 | Info Yatırım daily bulletin | Supplementary（仅观点节） | Pre-market summary and outlook |
 | Info Yatırım technical bulletin | Supplementary（仅观点节） | Support/resistance, technical signals |
@@ -70,14 +71,15 @@ Every source has a date guard. After fetching, the skill checks whether the fetc
 ## Run Flow
 
 1. Resolve target date in Turkey time (today's business day)
-2. Fetch BloombergHT close-of-day review + breaking/featured news
-3. Fetch Paraborsa broker commentary (priority: Destek > Bizim > Bulls > İnfo > Integral)
-4. Fetch Info Yatırım daily bulletin + technical bulletin from **date-specific archive pages** (not only the latest landing page)
-5. Run **source date verification**; discard stale cache and re-fetch if mismatched
-6. Build prompt from the template and collected data
-7. Call the configured LLM
-8. Validate output format (full + brief)
-9. Write files and return paths
+2. Fetch BloombergHT `/borsa/` first for the freshest XU100 and stock snapshot
+3. Fetch BloombergHT close-of-day review + breaking/featured news for high/low, sectors, FX and commodities
+4. Fetch Paraborsa broker commentary (priority: Destek > Bizim > Bulls > İnfo > Integral)
+5. Fetch Info Yatırım daily bulletin + technical bulletin from **date-specific archive pages** (not only the latest landing page)
+6. Run **source date verification**; discard stale cache and re-fetch if mismatched
+7. Build prompt from the template and collected data
+8. Call the configured LLM
+9. Validate output format (full + brief)
+10. Write files and return paths
 
 Brief format (one field per line):
 
@@ -97,14 +99,15 @@ Brief format (one field per line):
 
 | Source | Timing | Role | Content |
 |--------|--------|------|---------|
-| BloombergHT 详细收盘 | TR ~18:30 | **Primary** | BIST 100, sectors, stocks, forex, commodities |
+| BloombergHT `/borsa/` live snapshot | During session / after close | **Primary for XU100 and stocks** | XU100, gainers, losers, turnover leaders |
+| BloombergHT 详细收盘 | TR ~18:30 | **Primary for remaining close facts** | Intraday high/low, sectors, forex, commodities |
 | Paraborsa 券商评论 | TR ~16:30 | Supplementary | Broker commentary, technical analysis |
 | Info Yatırım 每日公告 | TR ~11:00 | Supplementary | Daily bulletin, stock recommendations |
 | Info Yatırım 技术分析 | TR ~12:00 | Supplementary | Technical analysis, support/resistance |
 
 Closing numbers and index changes must come from BloombergHT. The other sources are used only for technical levels, broker opinions, and sentiment — and only inside `【核心信号与逻辑】` / `【后市策略参考】`.
 
-Prompt plumbing: `scripts/bht_fact_sheet.py` converts BHT TL amounts to 「亿里拉」, strips clock stamps, and injects a Chinese **BHT事实卡** so the four factual sections can be copied without analysis.
+Prompt plumbing: `scripts/fetch_live_quotes.py` reads `/borsa/` before `/piyasalar`; `scripts/bht_fact_sheet.py` converts BHT TL amounts to 「亿里拉」, strips clock stamps, and injects a Chinese **BHT事实卡** so the four factual sections can be copied without analysis. For a forced historical date, the current `/borsa/` snapshot is not applied.
 
 ## Configuration
 

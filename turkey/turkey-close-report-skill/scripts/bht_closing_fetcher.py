@@ -962,20 +962,20 @@ def fetch_closing_review(
         cache_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         return manifest
 
+    # Same-day fast path: /borsa's related-news rail is observed to expose the
+    # close article before the all-news list. Try it first.
+    borsa_hit = _find_in_borsa_related(target_date)
+    attempts.append(("borsa_related", borsa_hit))
+    if borsa_hit:
+        cache_file.write_text(json.dumps(borsa_hit, ensure_ascii=False, indent=2), encoding="utf-8")
+        return borsa_hit
+
     list_hit, list_status, list_anchors = _scan_list_page(target_date, list_page_url)
     _seed_date_to_id_from_anchors(cache_dir, workdir, list_anchors)
     attempts.append(("list_page", list_hit))
     if list_hit:
         cache_file.write_text(json.dumps(list_hit, ensure_ascii=False, indent=2), encoding="utf-8")
         return list_hit
-
-    # Same-day dual path: /borsa İlgili Haberler may still have today's piece
-    # even when list_page briefly lags. Always try once after list miss.
-    borsa_hit = _find_in_borsa_related(target_date)
-    attempts.append(("borsa_related", borsa_hit))
-    if borsa_hit:
-        cache_file.write_text(json.dumps(borsa_hit, ensure_ascii=False, indent=2), encoding="utf-8")
-        return borsa_hit
 
     # List window says not published / date gap → do NOT burn ID/forecast scans.
     if list_status == LIST_ABSENT:

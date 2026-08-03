@@ -154,6 +154,16 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     live_quotes = fetch_live_quotes(cache_dir)
     if not live_quotes.get("ok"):
         print(f"Warning: live quotes (XU100) fetch failed: {live_quotes.get('error')}")
+    # The /borsa snapshot is authoritative for today's close only. When a
+    # historical date is forced, keep the article's BIST/stock facts instead
+    # of accidentally injecting the current market page.
+    live_quotes_for_target = live_quotes
+    if target_date != today:
+        live_quotes_for_target = dict(live_quotes)
+        live_quotes_for_target["quotes"] = dict(live_quotes.get("quotes") or {})
+        live_quotes_for_target["quotes"].pop("XU100", None)
+        live_quotes_for_target["borsa"] = {}
+        live_quotes_for_target["borsa_fact_cn"] = ""
 
     paraborsa = fetch_paraborsa(target_date, cache_dir)
     selected_content = paraborsa.get("selected", {}).get("content", "")
@@ -180,7 +190,10 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
         today_date=target_date.isoformat(),
         target_date=target_date.isoformat(),
         weekday_cn=weekday_cn,
-        bloomberght_text=format_bloomberght(bloomberght, live_quotes=live_quotes),
+        bloomberght_text=format_bloomberght(
+            bloomberght,
+            live_quotes=live_quotes_for_target,
+        ),
         paraborsa_text=format_paraborsa(paraborsa),
         info_yatirim_text=format_info_yatirim(info_yatirim),
     )
@@ -198,14 +211,19 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
     # Must use the same live XU100 index_override as the prompt, otherwise the
     # model writes live numbers while the validator fingerprints the article.
     index_override = None
-    if live_quotes and live_quotes.get("quotes", {}).get("XU100"):
-        if live_quotes.get("xu100_status") in ("intraday", "after_close"):
-            xu = live_quotes["quotes"]["XU100"]
+    if live_quotes_for_target and live_quotes_for_target.get("quotes", {}).get("XU100"):
+        if live_quotes_for_target.get("xu100_status") == "after_close":
+            xu = live_quotes_for_target["quotes"]["XU100"]
             index_override = {"last": xu.get("last"), "pct": xu.get("pct")}
     source_facts = (
         build_bht_fact_sheet(
             bloomberght.get("closing_review", {}).get("text", ""),
             index_override=index_override,
+            live_borsa=(
+                live_quotes_for_target.get("borsa") or {}
+                if live_quotes_for_target.get("xu100_status") == "after_close"
+                else {}
+            ),
         )
         if bloomberght.get("ok")
         else None
@@ -239,8 +257,8 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
         bht_detail = f"文章 id={cr['article_id']}"
     elif bloomberght.get("ok"):
         bht_detail = "已抓取收盘综述"
-    xu = (live_quotes.get("quotes") or {}).get("XU100") or {}
-    xu_status = live_quotes.get("xu100_status") or ""
+    xu = (live_quotes_for_target.get("quotes") or {}).get("XU100") or {}
+    xu_status = live_quotes_for_target.get("xu100_status") or ""
     xu_detail = ""
     if xu:
         xu_detail = f"XU100={xu.get('last')} ({xu.get('pct')}%) [{xu_status}]"
@@ -257,8 +275,18 @@ def generate(config_path: Path, force_date: str | None = None, no_llm: bool = Fa
         {
             "name": "BHT 实时行情 /piyasalar",
             "url": "https://www.bloomberght.com/piyasalar",
-            "status": "ok" if live_quotes.get("ok") else "fail",
+            "status": "ok" if live_quotes.get("piyasalar_ok") else "fail",
             "detail": xu_detail or (live_quotes.get("error") or ""),
+        },
+        {
+            "name": "BHT 实时行情 /borsa",
+            "url": "https://www.bloomberght.com/borsa/",
+            "status": "ok" if live_quotes.get("borsa_ok") else "fail",
+            "detail": (
+                "XU100/个股实时快照"
+                if live_quotes.get("borsa_ok")
+                else "未解析到 /borsa 快照"
+            ),
         },
         {
             "name": "Paraborsa 市场评论",

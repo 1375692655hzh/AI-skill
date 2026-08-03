@@ -160,6 +160,7 @@ def normalize_bht_text(text: str) -> str:
 def build_bht_fact_sheet(
     closing_text: str,
     index_override: Optional[dict] = None,
+    live_borsa: Optional[dict] = None,
 ) -> str:
     """Extract factual lines for 大盘/个股/板块/汇市大宗 — Chinese, no analysis.
 
@@ -231,38 +232,73 @@ def build_bht_fact_sheet(
 
     # --- stocks ---
     lines.append("【关键个股异动事实】")
-    # Match on raw TL amounts (normalize already rewrote them to 亿里拉 in `text`)
-    vols = re.findall(
-        r"\b([A-Z]{3,6})\s*\((\d{1,3}(?:\.\d{3})+)\s*TL\)",
-        raw,
-    )
-    if vols:
-        parts = []
-        for code, num in vols[:5]:
-            n = _tr_int(num)
-            if n is not None:
-                parts.append(f"{code} {tl_to_yi_str(n)}")
-        if parts:
-            lines.append("成交额前三：" + "，".join(parts) + "。")
-    gain = re.search(
-        r"En çok artan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olurken|\s+olarak|\.|\n)",
-        text,
-        re.I,
-    )
-    lose = re.search(
-        r"en çok azalan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olarak|\s+olurken|\.|\n)",
-        text,
-        re.I,
-    )
-
     def _codes(blob: str) -> str:
         codes = [x.strip().upper() for x in blob.split(",") if x.strip()]
         return "、".join(codes)
 
-    if gain:
-        lines.append(f"涨幅居前：{_codes(gain.group(1))}。")
-    if lose:
-        lines.append(f"跌幅居前：{_codes(lose.group(1))}。")
+    live_borsa = live_borsa or {}
+    live_volume = live_borsa.get("volume") or []
+    if live_volume:
+        parts = []
+        for item in live_volume[:3]:
+            amount = item.get("volume")
+            if amount is not None:
+                parts.append(f"{item['code']} {tl_to_yi_str(int(amount))}")
+        if parts:
+            lines.append("实时成交额前三：" + "，".join(parts) + "。")
+    else:
+        # Match on raw TL amounts (normalize already rewrote them to 亿里拉 in `text`)
+        vols = re.findall(
+            r"\b([A-Z]{3,6})\s*\((\d{1,3}(?:\.\d{3})+)\s*TL\)",
+            raw,
+        )
+        if vols:
+            parts = []
+            for code, num in vols[:5]:
+                n = _tr_int(num)
+                if n is not None:
+                    parts.append(f"{code} {tl_to_yi_str(n)}")
+            if parts:
+                lines.append("成交额前三：" + "，".join(parts[:3]) + "。")
+
+    live_gainers = live_borsa.get("gainers") or []
+    live_losers = live_borsa.get("losers") or []
+    if live_gainers:
+        gain_bits = []
+        for item in live_gainers[:5]:
+            pct = item.get("pct")
+            gain_bits.append(
+                f"{item['code']}（{_fmt_pts(float(pct))}%）"
+                if pct is not None
+                else item["code"]
+            )
+        lines.append("实时涨幅居前：" + "、".join(gain_bits) + "。")
+    if live_losers:
+        lose_bits = []
+        for item in live_losers[:5]:
+            pct = item.get("pct")
+            lose_bits.append(
+                f"{item['code']}（{_fmt_pts(float(pct))}%）"
+                if pct is not None
+                else item["code"]
+            )
+        lines.append("实时跌幅居前：" + "、".join(lose_bits) + "。")
+
+    if not live_gainers and not live_losers:
+        gain = re.search(
+            r"En çok artan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olurken|\s+olarak|\.|\n)",
+            text,
+            re.I,
+        )
+        lose = re.search(
+            r"en çok azalan hisseler[\s:]+([A-Za-z0-9_,\s]+?)(?:\s+olarak|\s+olurken|\.|\n)",
+            text,
+            re.I,
+        )
+        if gain:
+            lines.append(f"涨幅居前：{_codes(gain.group(1))}。")
+        if lose:
+            lines.append(f"跌幅居前：{_codes(lose.group(1))}。")
 
     # --- sectors ---
     lines.append("【行业板块表现事实】")
@@ -424,12 +460,21 @@ def format_bloomberght_for_prompt(data: dict, live_quotes: Optional[dict] = None
     raw = (data.get("closing_review") or {}).get("text") or ""
     normalized = normalize_bht_text(raw)
     index_override = None
+    live_borsa = {}
     if live_quotes and live_quotes.get("quotes", {}).get("XU100"):
-        if live_quotes.get("xu100_status") in ("intraday", "after_close"):
+        if live_quotes.get("xu100_status") == "after_close":
             xu = live_quotes["quotes"]["XU100"]
             index_override = {"last": xu.get("last"), "pct": xu.get("pct")}
-    sheet = build_bht_fact_sheet(raw, index_override=index_override)
+    if live_quotes and live_quotes.get("xu100_status") == "after_close":
+        live_borsa = live_quotes.get("borsa") or {}
+    sheet = build_bht_fact_sheet(
+        raw,
+        index_override=index_override,
+        live_borsa=live_borsa,
+    )
     blocks = ["【收盘数据｜已换算亿里拉、已去掉钟点】", normalized, "", sheet]
+    if live_borsa:
+        blocks.extend(["", live_quotes.get("borsa_fact_cn", "")])
     # News intentionally NOT required for the four factual sections
     if data.get("breaking_news"):
         blocks.append("\n【盘中突发｜仅供【核心信号与逻辑】可选引用标题，禁止写进大盘/个股/板块/汇市四节】")

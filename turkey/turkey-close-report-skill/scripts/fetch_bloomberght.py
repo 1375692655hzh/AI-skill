@@ -19,6 +19,7 @@ from bht_closing_fetcher import (
     _SESSION,
     fetch_closing_review as _fetch_closing_review,
 )
+from runtime_utils import configure_stdio
 
 BORSA_URL = f"{BASE}/borsa"
 
@@ -126,6 +127,7 @@ def fetch_close_review(
 
 
 if __name__ == "__main__":
+    configure_stdio()
     target = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else date.today()
     cache = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(".cache/turkey-close-report")
     workdir = Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else None

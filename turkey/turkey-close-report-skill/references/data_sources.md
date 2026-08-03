@@ -1,11 +1,25 @@
 ## 数据源详情
 
-### 1. BloombergHT 详细收盘（Piyasalarda günün özeti）
+### 1. BloombergHT `/borsa/` 实时行情
+
+| 项目 | 内容 |
+|------|------|
+| 页面 | https://www.bloomberght.com/borsa/ |
+| 角色 | **最快的 XU100 / 个股快照** |
+| 内容 | XU100、涨幅居前、跌幅居前、成交额居前 |
+
+抓取策略：
+1. 收盘 skill 先抓 `/borsa/`，解析 XU100、实时涨跌幅榜和成交额榜
+2. 页面结构变化时按三张股票表的稳定顺序（涨幅、跌幅、成交额）兜底
+3. `/borsa/` 只覆盖指数与个股快照；日内高低点、板块、汇市和大宗仍取收盘综述
+4. 目标日期为历史日期时，不注入当前 `/borsa/` 快照
+
+### 2. BloombergHT 详细收盘（Piyasalarda günün özeti）
 
 | 项目 | 内容 |
 |------|------|
 | 文章 CMS 时间戳 | TR ~18:30 / 北京 ~23:30（详情页 `<time>`，≠ 列表可见时间） |
-| 列表 / `/borsa` 相关区可见 | 可能更晚（观测约北京 23:50+）；自动化主跑建议北京 00:05～00:15 |
+| 列表 / `/borsa` 相关区可见 | 相关文章可能更晚；自动化主跑建议北京 00:05～00:15 |
 | 角色 | **核心收盘数据** |
 | 股市栏目 | https://www.bloomberght.com/borsa |
 | RSS | https://www.bloomberght.com/rss |
@@ -15,12 +29,12 @@
 | 标题旧格式 | `Piyasa özeti: {date} ...` |
 
 抓取策略：
-1. 先读取 RSS feed，匹配标题中的 `Piyasalarda günün özeti` 或 `Piyasa özeti`
-2. 用标题中的日期确定是否匹配 target_date
-3. 如 RSS 失败，fallback 到 borsa 主页抓取
-4. 最后 fallback 到文章 ID 探测
+1. 收盘当天先读取 `/borsa/` 的 `İlgili Haberler`，匹配标题或 slug 中的日期
+2. `/borsa/` 未命中时，再读取全市场新闻列表并做日期窗口判断
+3. 用标题或 slug 中的日期确定是否匹配 target_date
+4. 最后才 fallback 到缓存日期映射、RSS/预测 ID 和文章 ID 探测
 
-BIST 100 收盘价、涨跌幅、成交量、USD/TRY、EUR/TRY、黄金、原油等**所有核心收盘数据**均来自此来源。
+BIST 100 日内高低点、板块、USD/TRY、EUR/TRY、黄金、原油等**收盘综述字段**来自此来源；XU100 收盘快照、个股涨跌和成交额优先使用 `/borsa/`。
 
 写入成品时，下列四节必须 **100% 仅用本源、不加分析**：`【大盘概况】`、`【关键个股异动】`、`【行业板块表现】`、`【汇市与大宗商品】`。里拉成交额统一换算为「亿里拉」；汇市/大宗正文**不得保留**原文中的 `18:30` 等钟点（抓取后由 `bht_fact_sheet.py` 剥离）。
 
