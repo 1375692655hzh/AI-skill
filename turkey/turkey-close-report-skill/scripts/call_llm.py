@@ -24,9 +24,15 @@ def _resolve_api_key(api_key_or_env: str) -> str:
         if not value:
             raise RuntimeError(f"Environment variable {env_name} is not set.")
         return value
-    # Bare env var name (e.g. "MINIMAX_API_KEY") — look up before treating as literal key
-    env_value = os.environ.get(api_key_or_env)
-    if env_value:
+    # Bare env var name (e.g. "MINIMAX_API_KEY") — if the string looks like an
+    # env var name (uppercase + underscores), require it to be set. Otherwise
+    # treat it as a literal key. This prevents a missing env var from being
+    # sent as a literal "Bearer MINIMAX_API_KEY", which MiniMax rejects with
+    # HTTP 401 and silently masks the real "key not configured" problem.
+    if re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", api_key_or_env):
+        env_value = os.environ.get(api_key_or_env)
+        if not env_value:
+            raise RuntimeError(f"Environment variable {api_key_or_env} is not set.")
         return env_value
     return api_key_or_env
 
