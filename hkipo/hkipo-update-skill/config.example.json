@@ -1,0 +1,91 @@
+{
+  "workdir": ".",
+  "data_dir": "data",
+  "output_dir": "output",
+  "cache_dir": ".cache/hkipo",
+  "db_path": "data/state.db",
+  "target_date": "auto",
+  "force_recollect": false,
+  "sources": {
+    "hkex_appindex": {
+      "enabled": true,
+      "json_base": "https://www1.hkexnews.hk/ncms/json/eds/",
+      "surfaces": [
+        ["appactive_app_sehk_c.json", "active_application_proof"],
+        ["appactive_appphip_sehk_c.json", "active_phip"],
+        ["applisted_sehk_c.json", "listed"],
+        ["appreturned_sehk_c.json", "returned"]
+      ]
+    },
+    "hkex_new_listings": {
+      "enabled": true,
+      "main_board_url": "https://www2.hkexnews.hk/New-Listings/New-Listing-Information/Main-Board?sc_lang=zh-HK",
+      "gem_url": "https://www2.hkexnews.hk/New-Listings/New-Listing-Information/GEM?sc_lang=zh-HK",
+      "predefined_url": "https://www1.hkexnews.hk/search/predefineddoc.xhtml?lang=zh&predefineddocuments=6"
+    },
+    "tiger_json": {
+      "enabled": true,
+      "endpoint": "https://hktrade.skytigris.com/ipos/general/hk",
+      "margin_offset_days": 1
+    },
+    "aastocks": {
+      "enabled": true,
+      "base_url": "https://hk.aastocks.com/sc/stocks/market/ipo"
+    },
+    "hkex_pdf": {
+      "enabled": true,
+      "max_per_run": 15,
+      "titlesearch_endpoint": "https://www1.hkexnews.hk/search/titleSearchServlet.do"
+    }
+  },
+  "push": {
+    "channel": "bark",
+    "bark": {
+      "base_url": "https://api.day.app",
+      "key_env": "BARK_KEY",
+      "sound": "alert",
+      "group": "HKIPO"
+    },
+    "wx_work": {
+      "webhook_env": "WECOM_WEBHOOK",
+      "mentioned_mobile_list": []
+    },
+    "serverchan": {
+      "key_env": "SC_KEY",
+      "channel": "wechat"
+    },
+    "dry_run": false,
+    "silent_when_no_event": true,
+    "merge_multi_event": true
+  },
+  "llm": {
+    "provider": "minimax",
+    "model": "MiniMax-M3",
+    "api_key_env": "MINIMAX_API_KEY",
+    "base_url": "https://api.minimaxi.com/v1",
+    "temperature": 0.4,
+    "max_tokens": 4000,
+    "timeout": 180
+  },
+  "schedule": {
+    "timezone": "Asia/Shanghai",
+    "trading_days_only": true,
+    "update_bj": "07:30",
+    "remind_slots_bj": ["08:30", "09:00", "13:30", "16:00", "17:00", "18:15"],
+    "slot_to_event_types": {
+      "08:30": ["cash_close"],
+      "09:00": ["offer_open", "listing"],
+      "13:30": ["margin_close"],
+      "16:00": ["grey_open"],
+      "17:00": ["refund"],
+      "18:15": ["grey_close"]
+    },
+    "cleanup_bj": "03:00 Sundays"
+  },
+  "retention": {
+    "raw_snapshot_days": 14,
+    "grace_after_listing_days": 30,
+    "archive_after_days": 90
+  },
+  "holidays": []
+}

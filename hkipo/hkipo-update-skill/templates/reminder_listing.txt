@@ -1,0 +1,10 @@
+【港股新股·今日上市 — {event_date}】
+公司：{name_zh}（{stock_code}）
+业务：{business}
+招股价：{offer_price_min}–{offer_price_max} 港元
+每手：{board_lot} 股  公配：{public_offer_units} 股
+总市值：{total_mkt_cap_e8} 亿港元  流通市值：{free_float_e8} 亿港元
+上市时间：今日 09:00
+暗盘：{grey_date} 16:15–18:30（昨日已交易）
+资金解冻：{refund_date}
+招股书：{prospectus_url}

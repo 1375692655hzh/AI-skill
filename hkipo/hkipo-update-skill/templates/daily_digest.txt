@@ -1,0 +1,22 @@
+【港股新股每日变动 — {date}】
+
+新递表：
+{new_filings_block}
+
+新聆讯（PHIP 出现）：
+{new_hearings_block}
+
+新招股：
+{new_offers_block}
+
+新上市：
+{new_listings_block}
+
+招股中：
+{in_offer_block}
+
+即将上市（7 天内）：
+{coming_soon_block}
+
+数据源状态：
+{sources_status_block}

@@ -1,0 +1,10 @@
+【港股新股·暗盘{slot_label}提醒 — {event_date}】
+公司：{name_zh}（{stock_code}）
+业务：{business}
+招股价：{offer_price_min}–{offer_price_max} 港元
+每手：{board_lot} 股  公配：{public_offer_units} 股
+总市值：{total_mkt_cap_e8} 亿港元
+暗盘时间：今日 16:15–18:30（半日市 14:15–16:30）
+暗盘券商：富途/老虎/长桥/华盛
+上市：{listing_date} 09:00
+招股书：{prospectus_url}
